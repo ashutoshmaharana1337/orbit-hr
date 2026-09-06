@@ -39,6 +39,10 @@ jobs:
           cache: npm
           cache-dependency-path: api/package-lock.json
 
+      # Pinned to match the npm version the lockfile was generated with.
+      # Older npm resolves optional peer deps (magicast, typescript) into
+      # the lock differently and `npm ci` fails a sync check that isn't real drift.
+      - run: npm install -g npm@11.17.0
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
