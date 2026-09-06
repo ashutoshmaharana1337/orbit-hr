@@ -59,7 +59,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     const storedToken = window.localStorage.getItem(TOKEN_KEY)
     if (!storedToken) {
-      setState((s) => ({ ...s, loading: false }))
+      queueMicrotask(() => setState((s) => ({ ...s, loading: false })))
       return
     }
 
