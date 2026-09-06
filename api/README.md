@@ -31,6 +31,14 @@
 $ npm install
 ```
 
+This repo's `.npmrc` sets `ignore-scripts=true` (see `docs/01-project-setup.md`),
+so `npm install` will **not** run Prisma's postinstall hook. Generate the
+client explicitly before building, testing, or starting the app:
+
+```bash
+$ npx prisma generate
+```
+
 ## Compile and run the project
 
 ```bash
