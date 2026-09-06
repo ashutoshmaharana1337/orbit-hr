@@ -1,0 +1,144 @@
+# Backend
+
+NestJS 12 API (`api/`) backed by PostgreSQL via Prisma, running alongside
+the frontend in the same repo (`api/` sibling to `web/`).
+
+## Stack
+
+| Layer | Choice |
+|---|---|
+| Framework | NestJS 12 (ESM — see gotcha below) |
+| Database | PostgreSQL 16, via Docker Compose (`docker-compose.yml` at repo root) |
+| ORM | Prisma **6.19.3**, pinned deliberately — see gotcha below |
+| Auth | Passport JWT strategy, bcrypt password hashing |
+| Validation | `class-validator` / `class-transformer`, global `ValidationPipe` |
+
+## Running it
+
+```bash
+# from the repo root
+docker compose up -d          # starts Postgres on localhost:5432
+
+cd api
+npm install
+npx prisma migrate deploy     # apply migrations (non-interactive, safe)
+npm run prisma:seed           # populate demo data
+npm run start                 # http://localhost:3001/api
+```
+
+Seeded login: **girija.kuanr@acme.dev / password123** (tenant "Acme Inc.",
+role ADMIN, 15 employees, today's attendance, 6 leave requests).
+
+## Architecture
+
+Multi-tenant from the ground up, application-layer isolation (not Postgres
+RLS — see "What's not done yet" below):
+
+- Every domain table (`Employee`, `AttendanceRecord`, `LeaveRequest`) carries
+  a `tenantId`. Every query in every service is scoped by
+  `tenantId` pulled from the authenticated JWT payload — never trusted from
+  the request body/params.
+- `CurrentUser()` param decorator (`src/auth/decorators/current-user.decorator.ts`)
+  extracts `{ sub, tenantId, email, role }` from the validated JWT.
+- `JwtAuthGuard` + `RolesGuard` are applied per-controller
+  (`@UseGuards(JwtAuthGuard, RolesGuard)`), with `@Roles('ADMIN', 'HR')` etc.
+  gating individual routes.
+
+### Modules
+
+| Module | Routes | Notes |
+|---|---|---|
+| `auth` | `POST /auth/register`, `POST /auth/login`, `GET /auth/me` | Register creates a **Tenant + ADMIN User + Employee** in one transaction — this is the "company sign-up" flow, not an individual invite flow (see gaps below) |
+| `employees` | `GET /employees`, `GET /employees/:id`, `POST /employees` (ADMIN/HR), `PATCH /employees/:id` (ADMIN/HR) | List supports `?search=&department=&status=` |
+| `attendance` | `GET /attendance/today`, `GET /attendance/summary`, `POST /attendance/clock-in`, `PATCH /attendance/clock-out`, `POST /attendance` (ADMIN/HR/MANAGER, direct upsert) | Clock-in resolves the caller's own `Employee` row via their `userId`; one record per employee per day (`@@unique([employeeId, date])`) |
+| `leave` | `GET /leave`, `GET /leave/balance/:employeeId`, `POST /leave`, `PATCH /leave/:id/approve` (ADMIN/HR/MANAGER), `PATCH /leave/:id/reject` (ADMIN/HR/MANAGER) | Approving an `ANNUAL` or `SICK` request increments the matching `LeaveBalance` field; re-deciding an already-decided request is a 400 |
+
+All verified end-to-end against the running API (not just unit-level) —
+register → login → CRUD → tenant isolation (a second tenant genuinely can't
+see the first's data) → leave approve/balance-increment →
+duplicate-decision rejection → clock-in conflict handling. See the
+changelog for the specific test transcript.
+
+## Data model
+
+See `api/prisma/schema.prisma` for the source of truth. Six models:
+`Tenant`, `User` (login identity), `Employee` (HR profile — a `User` and an
+`Employee` are separate concerns; a `User` optionally links to one
+`Employee` via `userId`), `AttendanceRecord`, `LeaveRequest`,
+`LeaveBalance`.
+
+## Gotchas hit during setup
+
+### Prisma's CLI was mid-rewrite — pin to 6.x, not whatever `npm install prisma` gives you
+
+`npm install prisma` on this date pulled `8.0.0-rc.12` — not the classic
+Prisma ORM CLI, but **Prisma Composer**, a completely different product: a
+cloud-native service-mesh framework (`compute()`, typed RPC contracts,
+`prisma-composer deploy` to Prisma Cloud, `contract.prisma` instead of
+`schema.prisma`, no `prisma migrate dev` at all). It even auto-installs an
+agent-instructions skill (`prisma skills sync` → `.claude/skills/prisma-composer/`)
+because it expects an AI agent to need onboarding to its new mental model.
+
+None of that is what a plain "Postgres + ORM inside an existing NestJS app"
+setup needs, and `prisma-composer dev` doesn't even support Windows yet.
+**Fix**: pinned `prisma` and `@prisma/client` to `6.19.3` — the last stable
+line with the classic `schema.prisma` / `prisma migrate dev` /
+`prisma generate` workflow this project actually uses.
+
+If you ever bump Prisma versions here, check `npx prisma --version` first —
+if you see "Prisma Developer Platform" branding or commands like `contract`,
+`branch`, `bucket`, you've picked up Composer again, not the ORM.
+
+### Prisma refuses destructive commands from an AI agent — correctly
+
+`prisma migrate reset` (and similar) detects when it's invoked by an AI
+coding agent and hard-refuses without the user's literal, explicit consent
+piped through an env var — it will not run "because the agent decided it's
+fine." This is a deliberate safety feature and it worked as intended here:
+a mid-development schema fix (making `User.email` globally unique instead
+of per-tenant) initially reached for `migrate reset`, got refused, and
+was solved instead by hand-authoring the migration SQL
+(`prisma/migrations/<timestamp>_unique_user_email/migration.sql`) and
+applying it with `prisma migrate deploy` — which is non-destructive and
+safe to run non-interactively. No data was lost. Reach for this pattern
+(hand-write the SQL, `migrate deploy`) over `migrate reset` whenever a dev
+database has data worth keeping.
+
+### ESM + NodeNext imports
+
+The NestJS 12 scaffold used here is ESM (`"type": "module"` in
+`package.json`, `module`/`moduleResolution: nodenext` in `tsconfig.json`).
+Every relative import needs an explicit `.js` extension even though the
+source is `.ts` — `import { Foo } from './foo.js'`, not `'./foo'`. This is
+already consistent across every file in `src/`; keep it that way.
+
+### `PassportModule` needs `.register()` to do anything
+
+`imports: [PassportModule]` (bare, unconfigured) provides nothing — no
+`AuthModuleOptions`, so any guard extending `AuthGuard('jwt')` fails to
+resolve with `UnknownDependenciesException` the moment it's used outside
+`AuthModule` itself. Needed `PassportModule.register({ defaultStrategy: 'jwt' })`
+in `auth.module.ts`, then export both `PassportModule` and `JwtModule` from
+`AuthModule`, and import `AuthModule` into every feature module
+(`employees`, `attendance`, `leave`) that uses `JwtAuthGuard`.
+
+## What's not done yet
+
+- **No employee-invite flow.** `POST /auth/register` always creates a new
+  tenant + ADMIN user. There's no way yet for an admin to create a login
+  (`User`) for an existing `Employee` with a lower role — right now you can
+  create `Employee` records via the API, but only the original registrant
+  can log in. Needed before RBAC (MANAGER/EMPLOYEE roles) can be
+  meaningfully tested beyond ADMIN.
+- **Postgres RLS not implemented.** Tenant isolation is enforced entirely
+  in the application layer (every query includes `tenantId`). This was the
+  original plan's stated intent (see
+  [02-frontend-architecture.md](./02-frontend-architecture.md#planned-backend-shape))
+  but wasn't built — a missed `tenantId` filter in a future query would
+  leak cross-tenant data with no DB-level backstop.
+- **Frontend still runs entirely on mock data.** `web/` has not been wired
+  to call this API yet — that's the natural next step (auth pages, token
+  storage, replacing `src/lib/mock-data.ts` reads with fetches).
+- **No automated tests written** for the new modules (the vitest scaffold
+  is there; only the default `app.controller.spec.ts` was touched, to match
+  the health-check rename).

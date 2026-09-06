@@ -1,0 +1,38 @@
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { EmployeesService } from './employees.service.js';
+import { CreateEmployeeDto } from './dto/create-employee.dto.js';
+import { UpdateEmployeeDto } from './dto/update-employee.dto.js';
+import { ListEmployeesQuery } from './dto/list-employees.query.js';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
+import { RolesGuard } from '../auth/guards/roles.guard.js';
+import { Roles } from '../auth/decorators/roles.decorator.js';
+import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
+import type { JwtPayload } from '../auth/auth.types.js';
+
+@Controller('employees')
+@UseGuards(JwtAuthGuard, RolesGuard)
+export class EmployeesController {
+  constructor(private readonly employees: EmployeesService) {}
+
+  @Get()
+  list(@CurrentUser() user: JwtPayload, @Query() query: ListEmployeesQuery) {
+    return this.employees.list(user.tenantId, query);
+  }
+
+  @Get(':id')
+  findOne(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.employees.findOne(user.tenantId, id);
+  }
+
+  @Post()
+  @Roles('ADMIN', 'HR')
+  create(@CurrentUser() user: JwtPayload, @Body() dto: CreateEmployeeDto) {
+    return this.employees.create(user.tenantId, dto);
+  }
+
+  @Patch(':id')
+  @Roles('ADMIN', 'HR')
+  update(@CurrentUser() user: JwtPayload, @Param('id') id: string, @Body() dto: UpdateEmployeeDto) {
+    return this.employees.update(user.tenantId, id, dto);
+  }
+}

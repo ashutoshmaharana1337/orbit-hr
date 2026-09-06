@@ -1,0 +1,658 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orbit HR Production Readiness</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700;6..12,800&family=JetBrains+Mono:wght@400;500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js"></script>
+<style>
+  :root {
+    --ground: #f8f9fc;
+    --card: #ffffff;
+    --ink: #1c1a2e;
+    --ink-2: #4a475e;
+    --muted: #7a7790;
+    --line: #e4e2ee;
+    --line-strong: #cfcbe0;
+    --brand: #7c46f1;
+    --brand-ink: #5a2fc4;
+    --brand-tint: #f2edff;
+    --critical: #d03b3b;
+    --critical-tint: #fdeeee;
+    --warning: #b87700;
+    --warning-tint: #fff5e0;
+    --good: #0f8f0f;
+    --good-tint: #e9f7e9;
+    --info: #2a78d6;
+    --info-tint: #e8f1fc;
+    --code-bg: #f1effa;
+    --shadow: 0 1px 2px rgba(28, 26, 46, .05), 0 4px 14px rgba(28, 26, 46, .05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #14121f;
+      --card: #1d1a2b;
+      --ink: #eeecf6;
+      --ink-2: #c3bfd6;
+      --muted: #8f8ba6;
+      --line: #2c2940;
+      --line-strong: #3d3956;
+      --brand: #9c7bf5;
+      --brand-ink: #b9a3f8;
+      --brand-tint: #26203f;
+      --critical: #f07070;
+      --critical-tint: #3a1f22;
+      --warning: #e7ab3a;
+      --warning-tint: #3a2f16;
+      --good: #5fcf5f;
+      --good-tint: #1b3320;
+      --info: #6aa8f0;
+      --info-tint: #1b2a40;
+      --code-bg: #262238;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.25);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #14121f;
+    --card: #1d1a2b;
+    --ink: #eeecf6;
+    --ink-2: #c3bfd6;
+    --muted: #8f8ba6;
+    --line: #2c2940;
+    --line-strong: #3d3956;
+    --brand: #9c7bf5;
+    --brand-ink: #b9a3f8;
+    --brand-tint: #26203f;
+    --critical: #f07070;
+    --critical-tint: #3a1f22;
+    --warning: #e7ab3a;
+    --warning-tint: #3a2f16;
+    --good: #5fcf5f;
+    --good-tint: #1b3320;
+    --info: #6aa8f0;
+    --info-tint: #1b2a40;
+    --code-bg: #262238;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.25);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "Nunito Sans", "Segoe UI", system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+  }
+  code, pre, .mono { font-family: "JetBrains Mono", Consolas, "SFMono-Regular", monospace; }
+  code {
+    font-size: .86em;
+    background: var(--code-bg);
+    padding: .1em .4em;
+    border-radius: 5px;
+    color: var(--ink);
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-size: .84rem;
+    line-height: 1.55;
+    margin: 0;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  a { color: var(--brand-ink); }
+
+  .page { max-width: 880px; margin: 0 auto; padding: 40px 24px 96px; }
+  .masthead {
+    display: flex; flex-direction: column; gap: 14px;
+    padding-bottom: 28px; border-bottom: 1px solid var(--line); margin-bottom: 36px;
+  }
+  .brand-row { display: flex; align-items: center; gap: 10px; }
+  .brand-mark {
+    width: 32px; height: 32px; border-radius: 9px; background: var(--brand);
+    display: grid; place-items: center; color: #fff; flex: none;
+  }
+  .eyebrow {
+    font-size: .74rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--muted);
+  }
+  h1 {
+    font-size: clamp(1.9rem, 4vw, 2.6rem); font-weight: 800; letter-spacing: -.02em;
+    line-height: 1.1; margin: 0; text-wrap: balance;
+  }
+  .lede { font-size: 1.08rem; color: var(--ink-2); max-width: 66ch; margin: 0; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: .86rem; color: var(--muted); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+
+  h2 {
+    font-size: 1.45rem; font-weight: 800; letter-spacing: -.015em; margin: 56px 0 6px;
+    text-wrap: balance;
+  }
+  h2 + p.sub { margin: 0 0 18px; color: var(--muted); font-size: .95rem; }
+  h3 { font-size: 1.05rem; font-weight: 700; margin: 26px 0 8px; }
+  p { max-width: 68ch; }
+  p, ul, ol { margin: 0 0 12px; }
+  li { margin-bottom: 5px; }
+  li::marker { color: var(--muted); }
+
+  /* verdict banner */
+  .verdict {
+    display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: start;
+    background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--warning);
+    border-radius: 12px; padding: 18px 20px; box-shadow: var(--shadow); margin-bottom: 28px;
+  }
+  .verdict .score { font-size: 2.4rem; font-weight: 800; letter-spacing: -.03em; line-height: 1; color: var(--warning); font-variant-numeric: tabular-nums; }
+  .verdict .score small { display: block; font-size: .7rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-top: 6px; }
+  .verdict p { margin: 0; }
+  .verdict p + p { margin-top: 6px; }
+
+  /* scorecard */
+  .score-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 18px 0 8px; }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+  .tile .k { font-size: .78rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .tile .v { font-size: .95rem; color: var(--ink-2); }
+
+  /* chips */
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; font-size: .72rem; font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase; padding: 2px 9px; border-radius: 999px; white-space: nowrap;
+  }
+  .chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .chip.critical { color: var(--critical); background: var(--critical-tint); }
+  .chip.high { color: var(--warning); background: var(--warning-tint); }
+  .chip.medium { color: var(--info); background: var(--info-tint); }
+  .chip.good { color: var(--good); background: var(--good-tint); }
+  .chip.brand { color: var(--brand-ink); background: var(--brand-tint); }
+
+  /* findings */
+  .finding { display: grid; grid-template-columns: 110px 1fr; gap: 14px; padding: 16px 0; border-top: 1px solid var(--line); }
+  .finding:last-child { border-bottom: 1px solid var(--line); }
+  .finding h4 { margin: 0 0 4px; font-size: 1rem; font-weight: 700; }
+  .finding p { margin: 0 0 6px; color: var(--ink-2); font-size: .95rem; }
+  .finding .where { font-size: .8rem; color: var(--muted); }
+  .finding .fix { font-size: .92rem; }
+  .finding .fix b { color: var(--good); font-weight: 700; }
+
+  /* phases */
+  .phase { display: grid; grid-template-columns: 56px 1fr; gap: 16px; padding: 20px 0; border-top: 1px solid var(--line); }
+  .phase:last-of-type { border-bottom: 1px solid var(--line); }
+  .phase .n {
+    width: 44px; height: 44px; border-radius: 10px; background: var(--brand-tint); color: var(--brand-ink);
+    font-weight: 800; font-size: 1.1rem; display: grid; place-items: center; font-variant-numeric: tabular-nums;
+  }
+  .phase h3 { margin: 4px 0 2px; }
+  .phase .when { font-size: .82rem; color: var(--muted); margin-bottom: 8px; }
+  .phase ul { margin: 0; padding-left: 18px; font-size: .95rem; }
+  .phase .gate { margin-top: 10px; font-size: .88rem; padding: 8px 12px; background: var(--good-tint); border-radius: 8px; color: var(--ink-2); }
+  .phase .gate b { color: var(--good); }
+
+  /* tables */
+  .tbl-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+  table { border-collapse: collapse; width: 100%; font-size: .92rem; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: .74rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--ground); }
+  tr:last-child td { border-bottom: 0; }
+  td.num { font-variant-numeric: tabular-nums; }
+
+  /* figures */
+  figure { margin: 18px 0 28px; }
+  .fig-box { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; overflow-x: auto; }
+  pre.mermaid { background: none; border: 0; padding: 0; font-size: 14px; overflow: visible; }
+  figcaption { font-size: .86rem; color: var(--muted); margin-top: 10px; max-width: 70ch; }
+
+  .callout { background: var(--brand-tint); border-radius: 10px; padding: 12px 16px; font-size: .95rem; color: var(--ink-2); margin: 14px 0; }
+  .callout b { color: var(--brand-ink); }
+
+  .checklist { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+  .checklist li { display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: start; font-size: .95rem; }
+  .checklist li::before { content: ""; width: 16px; height: 16px; margin-top: 4px; border: 1.5px solid var(--line-strong); border-radius: 4px; }
+
+  @media (max-width: 600px) {
+    .finding { grid-template-columns: 1fr; gap: 6px; }
+    .phase { grid-template-columns: 1fr; }
+    .verdict { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+  body { color-scheme: light dark; }
+  .mermaid { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="masthead">
+    <div class="brand-row">
+      <div class="brand-mark" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>
+      </div>
+      <span class="eyebrow">Orbit HR · Engineering review</span>
+    </div>
+    <h1>Production readiness review and launch plan</h1>
+    <p class="lede">A senior-level read of the Orbit HR codebase as it stands today: what is solid, what would break or leak in production, the order to fix it in, and how the system should run once it is live.</p>
+    <div class="meta">
+      <span><b>Reviewed</b> 5 Sep 2026</span>
+      <span><b>Scope</b> web/ (Next.js 16) · api/ (NestJS 12 + Prisma 6 + Postgres 16) · docs/</span>
+      <span><b>Reviewer role</b> Tech lead / project manager</span>
+    </div>
+  </header>
+
+  <div class="verdict">
+    <div class="score">Not yet<small>Production verdict</small></div>
+    <div>
+      <p><b>The foundation is good and the backend design is right.</b> Multi-tenant scoping from the JWT, a clean module split, validated DTOs, hand-written migrations, and unusually honest docs. That is more than most six-session projects have.</p>
+      <p><b>But it cannot ship yet.</b> There is no version control, one endpoint allows a cross-tenant write, read access ignores roles entirely, and four of the five screens still render mock data. Six focused weeks closes the gap. The plan below is ordered so each week reduces real risk, not just adds features.</p>
+    </div>
+  </div>
+
+  <h2>1. Where the project stands</h2>
+  <p class="sub">A scorecard, not a grade. Green means "would survive contact with a real customer".</p>
+  <div class="score-grid">
+    <div class="tile"><span class="chip good">Solid</span><span class="k">Data model</span><span class="v">Six well-indexed tables, tenant column everywhere, sensible unique constraints.</span></div>
+    <div class="tile"><span class="chip good">Solid</span><span class="k">API structure</span><span class="v">Auth, employees, attendance, leave modules. Guards, DTO validation, transactions on signup.</span></div>
+    <div class="tile"><span class="chip good">Solid</span><span class="k">UI and design system</span><span class="v">Consistent tokens, shared components, validated chart palette, real login flow.</span></div>
+    <div class="tile"><span class="chip high">Gap</span><span class="k">Authorization</span><span class="v">Roles gate writes only. Any employee can read everyone's leave reasons and phone numbers.</span></div>
+    <div class="tile"><span class="chip critical">Blocker</span><span class="k">Source control</span><span class="v">The folder is not a git repository. It lives in OneDrive Desktop.</span></div>
+    <div class="tile"><span class="chip critical">Blocker</span><span class="k">Frontend data</span><span class="v">Dashboard, Employees, Attendance, Leave all read mock-data.ts. Only login is real.</span></div>
+    <div class="tile"><span class="chip high">Gap</span><span class="k">Tests</span><span class="v">One unit test. The e2e test still expects "Hello World!" on a route that no longer exists.</span></div>
+    <div class="tile"><span class="chip high">Gap</span><span class="k">Infrastructure</span><span class="v">No Dockerfiles, no CI, no staging, no hosted database, no logging or error tracking.</span></div>
+  </div>
+
+  <h2>2. Findings that matter</h2>
+  <p class="sub">Verified by reading the code, ordered by how badly they would hurt a paying customer. Each one names the fix.</p>
+
+  <div class="finding">
+    <div><span class="chip critical">Critical</span></div>
+    <div>
+      <h4>No version control</h4>
+      <p>There is no <code>.git</code> directory. Every change so far exists only as files on a synced desktop. One bad sync or a mistaken delete loses the project, and nothing downstream (CI, review, deploys, rollback) is possible without it.</p>
+      <div class="fix"><b>Fix:</b> <code>git init</code> today, push to a private GitHub repo, protect <code>main</code>, require pull requests. Move the working copy out of OneDrive afterwards so the sync client stops fighting <code>node_modules</code> and <code>.next</code>.</div>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div><span class="chip critical">Critical</span></div>
+    <div>
+      <h4>Cross-tenant write through attendance upsert</h4>
+      <p>The direct upsert endpoint takes <code>employeeId</code> from the request body and never checks it belongs to the caller's tenant. A manager in tenant A who knows an employee UUID in tenant B can create or overwrite that person's attendance. The same unchecked-ID pattern exists for <code>managerId</code> when creating or updating an employee.</p>
+      <div class="where">api/src/attendance/attendance.service.ts · upsert() · api/src/employees/employees.service.ts · create() and update()</div>
+      <div class="fix"><b>Fix:</b> resolve every foreign ID through a tenant-scoped lookup before writing. Add an e2e test that registers two tenants and proves the write is rejected. Longer term, enable Postgres row-level security as the backstop the docs already say is missing.</div>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div><span class="chip high">High</span></div>
+    <div>
+      <h4>Reads ignore roles</h4>
+      <p>Roles only guard create, update, approve and reject. Any authenticated EMPLOYEE can list the whole company with phone numbers, read every leave request including the reason text, and fetch any colleague's leave balance. In HR software that is a privacy incident, and under GDPR or India's DPDP Act it is reportable.</p>
+      <div class="where">GET /employees · GET /leave · GET /leave/balance/:employeeId</div>
+      <div class="fix"><b>Fix:</b> define a visibility rule per role. EMPLOYEE sees self and a public directory subset (name, title, department). MANAGER sees direct reports. HR and ADMIN see the tenant. Apply it inside the service, not the controller, so every caller inherits it.</div>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div><span class="chip high">High</span></div>
+    <div>
+      <h4>Managers can approve anyone, including themselves</h4>
+      <p>Approval is gated by role only. A MANAGER can approve any request in the tenant, and nothing stops them approving their own. The approval also runs as two separate writes (status update, then balance increment), so a failure between them leaves the balance wrong. There is no check that the request fits the remaining balance.</p>
+      <div class="where">api/src/leave/leave.service.ts · decide()</div>
+      <div class="fix"><b>Fix:</b> wrap in <code>$transaction</code>; require the approver to be the employee's manager or HR/ADMIN; reject self-approval; reject when <code>days</code> exceeds the remaining balance.</div>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div><span class="chip high">High</span></div>
+    <div>
+      <h4>Session and auth hardening</h4>
+      <p>The JWT lives in <code>localStorage</code> for 24 hours with no refresh, no revocation, and no way to log out server-side. Login and register have no rate limiting, so password guessing and tenant-spam are free. There is no email verification, password reset, or invite flow, so the only way to add a login is the seed script. The example secret is a placeholder string.</p>
+      <div class="where">web/src/lib/auth-context.tsx · api/src/auth/* · api/.env.example</div>
+      <div class="fix"><b>Fix:</b> short-lived access token (15 min) in an httpOnly, SameSite cookie plus a rotating refresh token stored hashed in Postgres. Add <code>@nestjs/throttler</code> and <code>helmet</code>. Build the invite flow (ADMIN/HR creates a User for an existing Employee, sends a set-password link). Generate the production secret with <code>openssl rand -base64 48</code>.</div>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div><span class="chip high">High</span></div>
+    <div>
+      <h4>"Today" is the server's today</h4>
+      <p>Attendance computes the current day and the LATE cutoff from the server's local clock. On a UTC container, a Bengaluru employee clocking in at 9 AM is recorded at 3:30 AM UTC, and anyone clocking in before 5:30 AM IST lands on yesterday's row. The seeded data has employees in six time zones.</p>
+      <div class="where">api/src/attendance/attendance.service.ts · startOfToday(), clockIn()</div>
+      <div class="fix"><b>Fix:</b> add <code>timezone</code> to Tenant (later to Employee), compute the business date and LATE cutoff in that zone with a library such as <code>date-fns-tz</code>, and make the cutoff a tenant setting rather than a hardcoded 10:00.</div>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div><span class="chip high">High</span></div>
+    <div>
+      <h4>Departments are hardcoded in the frontend and free text in the backend</h4>
+      <p>The department landing page is statically generated from six mock names and calls <code>notFound()</code> for anything else. Login redirects to <code>/d/{department}</code>. The moment a real tenant creates an "Operations" employee and gives them a login, they get a 404 after signing in.</p>
+      <div class="where">web/src/app/(app)/d/[department]/page.tsx · web/src/app/login/page.tsx · prisma Employee.department</div>
+      <div class="fix"><b>Fix:</b> add a <code>Department</code> table (tenant-scoped, with a slug), make the landing page dynamic and fetch from the API, and let tenants define their own list in settings.</div>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div><span class="chip medium">Medium</span></div>
+    <div>
+      <h4>Four of five screens are mock</h4>
+      <p>Dashboard, Employees, Attendance and Leave import from <code>mock-data.ts</code>. Approve and reject on the leave board mutate React state. The dashboard greets "Girija" and says "Sep 2" as string literals, and the sidebar hardcodes "Acme Inc." regardless of tenant. Only the header identity and login are real.</p>
+      <div class="fix"><b>Fix:</b> Phase 2 below. Adopt TanStack Query, add the two aggregate endpoints the dashboard needs, and replace one screen at a time in the order Employees, Attendance, Leave, Dashboard.</div>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div><span class="chip medium">Medium</span></div>
+    <div>
+      <h4>Leave arithmetic is naive</h4>
+      <p>Days are counted inclusively across calendar days, so a Monday-to-Friday request costs 5 and a Saturday-to-Sunday one costs 2. There is no holiday calendar, no accrual period, and no annual reset, so balances only ever go up.</p>
+      <div class="fix"><b>Fix:</b> a <code>LeavePolicy</code> per tenant (working days, holidays, entitlements) and a <code>LeaveBalance</code> row per employee per period. Compute days server-side from the policy and return it to the UI before submit.</div>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div><span class="chip medium">Medium</span></div>
+    <div>
+      <h4>Tests do not reflect the app</h4>
+      <p>The e2e spec still requests <code>GET /</code> and expects "Hello World!", but the only route is <code>GET /api/health</code>. Running <code>npm run test:e2e</code> fails before any real behaviour is exercised. The four business modules have zero tests, and the end-to-end verification in the changelog was done by hand.</p>
+      <div class="fix"><b>Fix:</b> delete the stale spec. Add supertest e2e tests against a throwaway Postgres (Docker service in CI) covering the flows the changelog already verified manually, plus the tenant-isolation cases above. Aim for the tests to be the thing that proves the isolation, not a session transcript.</div>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div><span class="chip medium">Medium</span></div>
+    <div>
+      <h4>Housekeeping</h4>
+      <ul style="margin:0; padding-left:18px; color: var(--ink-2); font-size:.95rem">
+        <li>Three <code>prisma-composer</code> skill folders (<code>.agents</code>, <code>.cursor</code>, <code>.devin</code>) left over from the wrong Prisma install. Delete them.</li>
+        <li><code>tsconfig.build.tsbuildinfo</code> sits in the source tree. Ignore it.</li>
+        <li>List endpoints have no pagination. Fine for 15 rows, not for a 2,000-person tenant.</li>
+        <li>No request logging, no request ID, no structured errors. Debugging production will be blind.</li>
+        <li><code>User.email</code> is globally unique, so one person can never belong to two tenants (a contractor, an auditor). Acceptable for v1, but decide it consciously and document it.</li>
+        <li>The seed uses <code>Math.random()</code> for balances, so two seeded environments differ. Make it deterministic.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>3. Roadmap to production</h2>
+  <p class="sub">Seven phases, in order. Each ends with a gate you can check, not a feeling. Estimates assume one full-time engineer.</p>
+
+  <div class="phase">
+    <div class="n">0</div>
+    <div>
+      <h3>Foundations</h3>
+      <div class="when">Week 1, first two days</div>
+      <ul>
+        <li>Initialise git, push to GitHub, protect <code>main</code>, all work through pull requests.</li>
+        <li>Add a root <code>package.json</code> with workspaces (or keep two apps but one CI file) so <code>lint</code>, <code>typecheck</code>, <code>test</code>, <code>build</code> run from the root.</li>
+        <li>GitHub Actions: on every PR run lint, TypeScript check, unit tests, and both builds. Spin up Postgres as a service container and run <code>prisma migrate deploy</code> so migrations are validated on every change.</li>
+        <li>Delete the composer leftovers, fix the stale e2e spec, ignore build info files.</li>
+        <li>Pin Node to 22 LTS with <code>.nvmrc</code> and <code>engines</code>. Prisma stays pinned at 6.19.x as the docs already warn.</li>
+      </ul>
+      <div class="gate"><b>Gate:</b> a PR that breaks the build or a migration cannot merge.</div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="n">1</div>
+    <div>
+      <h3>Security and correctness</h3>
+      <div class="when">Week 1 to 2</div>
+      <ul>
+        <li>Tenant-scope every foreign ID (<code>employeeId</code>, <code>managerId</code>) before writing.</li>
+        <li>Role-aware reads: visibility rules for employees, leave, balances. Manager-scoped approvals, no self-approval, balance check, transactional decide.</li>
+        <li>Move the session to an httpOnly cookie with refresh rotation. Add throttling and helmet. Lock CORS to the real web origin.</li>
+        <li>Invite flow and password reset, with transactional email through Resend or Postmark.</li>
+        <li>Tenant timezone and a configurable late cutoff.</li>
+        <li>Enable Postgres row-level security keyed on a session variable Prisma sets per request. This is the safety net for the next missed <code>tenantId</code>.</li>
+      </ul>
+      <div class="gate"><b>Gate:</b> an e2e suite proves two tenants cannot read or write each other's data through any endpoint, and an EMPLOYEE cannot read a colleague's leave reason.</div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="n">2</div>
+    <div>
+      <h3>Wire the frontend to the API</h3>
+      <div class="when">Week 2 to 4</div>
+      <ul>
+        <li>Adopt TanStack Query for fetching, caching and optimistic updates. Generate typed API clients from the DTOs (or share a <code>packages/contracts</code> type module) so the two apps cannot drift.</li>
+        <li>Replace screens in order of value: Employees (list, profile, create, edit), Attendance (today, clock in and out for self), Leave (request, approve, reject against the real API), then Dashboard.</li>
+        <li>Add the two aggregate endpoints the dashboard needs: <code>GET /dashboard/stats</code> and <code>GET /attendance/trend?days=7</code>. Never compute aggregates in the browser from full lists.</li>
+        <li>Department landing page becomes dynamic and API-backed. Tenant name and greeting come from <code>/auth/me</code>.</li>
+        <li>Delete <code>mock-data.ts</code> when the last import is gone. That deletion is the milestone.</li>
+      </ul>
+      <div class="gate"><b>Gate:</b> <code>grep -r mock-data web/src</code> returns nothing, and a fresh tenant registered through the UI can run a full leave cycle end to end.</div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="n">3</div>
+    <div>
+      <h3>Complete the data model</h3>
+      <div class="when">Week 4 to 5</div>
+      <ul>
+        <li><code>Department</code> table, tenant-scoped, editable in settings.</li>
+        <li><code>LeavePolicy</code> with working days, public holidays, entitlements per type. <code>LeaveBalance</code> per employee per year.</li>
+        <li><code>AuditLog</code> for every write that touches a person: who, what, when, before and after. HR customers will ask for this in the first demo.</li>
+        <li>Soft delete for Employee (<code>deletedAt</code>) so offboarding keeps history.</li>
+        <li>Cursor pagination on every list endpoint.</li>
+      </ul>
+      <div class="gate"><b>Gate:</b> every migration in the folder applies cleanly to a copy of the staging database.</div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="n">4</div>
+    <div>
+      <h3>Testing you can trust</h3>
+      <div class="when">Runs alongside phases 1 to 3, closes in week 5</div>
+      <ul>
+        <li>Unit tests for service logic: leave day calculation, balance checks, timezone day boundaries, role visibility.</li>
+        <li>Supertest e2e per module against a real Postgres in CI, seeded per test file.</li>
+        <li>Playwright smoke suite for the five critical paths: register, invite and accept, clock in, request leave, approve leave. Run on every deploy to staging.</li>
+      </ul>
+      <div class="gate"><b>Gate:</b> CI is green, and the smoke suite runs against staging automatically.</div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="n">5</div>
+    <div>
+      <h3>Infrastructure and deployment</h3>
+      <div class="when">Week 5 to 6</div>
+      <ul>
+        <li><b>Web:</b> Vercel. It is what Next.js 16 is built for, and you keep the webpack build flag you already need.</li>
+        <li><b>API:</b> a multi-stage Dockerfile (build, then a slim <code>node:22-alpine</code> runtime running <code>dist/main</code>), deployed to Railway, Fly.io or Render. Two instances minimum behind their load balancer.</li>
+        <li><b>Database:</b> managed Postgres with automated backups and point-in-time recovery. Neon or Supabase for speed, RDS if the company already has AWS. Never Docker Compose in production.</li>
+        <li><b>Migrations:</b> <code>prisma migrate deploy</code> runs as a release step before the new API version receives traffic, never at container start.</li>
+        <li><b>Secrets:</b> platform environment variables only. No <code>.env</code> files on servers.</li>
+        <li>Staging environment that mirrors production, with its own database, seeded with the demo tenant.</li>
+        <li>Custom domain, TLS, and CORS restricted to <code>https://app.yourdomain</code>.</li>
+      </ul>
+      <div class="gate"><b>Gate:</b> a merge to <code>main</code> reaches staging with no manual steps, and a tagged release reaches production with one approval click.</div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="n">6</div>
+    <div>
+      <h3>Observability and launch</h3>
+      <div class="when">Week 6</div>
+      <ul>
+        <li>Structured JSON logs (pino) with a request ID and the tenant ID on every line. Ship them to the platform's log drain or Better Stack.</li>
+        <li>Sentry in both apps, with the tenant and user role attached to every event.</li>
+        <li><code>/api/health</code> must hit the database, and the platform must use it for readiness. An uptime monitor pings it every minute.</li>
+        <li>Restore a backup into staging once, on purpose, and time it. A backup you have never restored is a hope.</li>
+        <li>Load test the list and dashboard endpoints at a 2,000-employee tenant size.</li>
+        <li>Privacy policy, data retention rules, and an internal runbook for "a customer asks us to delete their data".</li>
+      </ul>
+      <div class="gate"><b>Gate:</b> the launch checklist in section 6 is fully ticked.</div>
+    </div>
+  </div>
+
+  <h2>4. How Orbit HR runs in production</h2>
+  <p class="sub">Target architecture after phase 5. Solid arrows carry user traffic, dashed arrows are background or operational.</p>
+
+  <figure>
+    <div class="fig-box">
+<pre class="mermaid">
+flowchart LR
+  U["Browser<br/>HR admin · manager · employee"]
+  subgraph EDGE["Vercel edge"]
+    W["Next.js 16 app<br/>static shell + client fetches"]
+  end
+  subgraph API["API platform (Railway / Fly / Render)"]
+    LB["Load balancer<br/>TLS termination"]
+    A1["NestJS instance 1"]
+    A2["NestJS instance 2"]
+  end
+  subgraph DATA["Managed data"]
+    PG[("PostgreSQL 16<br/>row-level security · PITR backups")]
+    R[("Redis<br/>rate limits · refresh tokens")]
+  end
+  MAIL["Email provider<br/>Resend / Postmark"]
+  OBS["Sentry + log drain<br/>uptime monitor"]
+  CI["GitHub Actions<br/>build · test · migrate · deploy"]
+
+  U -->|"HTTPS"| W
+  W -->|"JSON over HTTPS<br/>httpOnly cookie"| LB
+  LB --> A1
+  LB --> A2
+  A1 -->|"Prisma, tenantId on every query"| PG
+  A2 -->|"Prisma, tenantId on every query"| PG
+  A1 -.->|"throttle · sessions"| R
+  A2 -.->|"throttle · sessions"| R
+  A1 -.->|"invites · password reset"| MAIL
+  A1 -.->|"errors · structured logs"| OBS
+  W -.->|"client errors"| OBS
+  CI -.->|"deploy web"| W
+  CI -.->|"prisma migrate deploy, then release"| A1
+  CI -.->|"migrations"| PG
+</pre>
+    </div>
+    <figcaption>Two stateless API instances behind a load balancer, one managed Postgres with row-level security as the second line of tenant isolation, and Redis for the two things that must be shared across instances. The web app is static on the edge and only ever talks to the API.</figcaption>
+  </figure>
+
+  <h3>What a single request does</h3>
+  <figure>
+    <div class="fig-box">
+<pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant B as Browser
+  participant N as Next.js (Vercel)
+  participant G as JwtAuthGuard + RolesGuard
+  participant S as LeaveService
+  participant P as Prisma
+  participant DB as PostgreSQL
+
+  B->>N: Open /leave
+  N-->>B: Static shell, then fetch
+  B->>G: PATCH /api/leave/:id/approve (cookie)
+  G->>G: Verify JWT, read tenantId + role
+  G->>G: Role in [ADMIN, HR, MANAGER]?
+  G->>S: decide(tenantId, id, approverId)
+  S->>P: findFirst leave where id AND tenantId
+  P->>DB: SELECT ... (RLS: tenant = current setting)
+  DB-->>P: request row
+  S->>S: status is PENDING? approver manages employee? days within balance?
+  S->>P: $transaction: update status, increment balance, write AuditLog
+  P->>DB: UPDATE, UPDATE, INSERT
+  DB-->>S: committed
+  S-->>B: 200 updated request
+  B->>B: TanStack Query invalidates leave list and balance
+</pre>
+    </div>
+    <figcaption>Leave approval after phase 1. The tenant ID never comes from the client, the guard checks role, the service checks the relationship and the balance, and the three writes commit or fail together.</figcaption>
+  </figure>
+
+  <h2>5. Delivery pipeline</h2>
+  <p class="sub">What happens between a developer's push and customers seeing the change.</p>
+
+  <figure>
+    <div class="fig-box">
+<pre class="mermaid">
+flowchart TD
+  A["Push branch, open PR"] --> B["CI: lint · typecheck · unit tests"]
+  B --> C["CI: Postgres service<br/>prisma migrate deploy · e2e tests"]
+  C --> D["CI: build web + api image"]
+  D --> E{"All green and reviewed?"}
+  E -->|"no"| F["Fix on branch"] --> B
+  E -->|"yes"| G["Merge to main"]
+  G --> H["Deploy web to Vercel preview → staging"]
+  G --> I["Run prisma migrate deploy on staging DB"]
+  I --> J["Release API image to staging"]
+  H --> K["Playwright smoke suite against staging"]
+  J --> K
+  K --> L{"Smoke passed?"}
+  L -->|"no"| M["Roll back staging, open incident"] --> F
+  L -->|"yes"| N["Tag release, one-click approval"]
+  N --> O["Migrate production DB"]
+  O --> P["Release API to production, rolling"]
+  P --> Q["Promote web build to production"]
+  Q --> R["Health check + Sentry release marker"]
+  R --> S{"Errors spike in 15 min?"}
+  S -->|"yes"| T["Roll back API image and web build<br/>migrations stay, they are additive"]
+  S -->|"no"| U["Done"]
+</pre>
+    </div>
+    <figcaption>Migrations run before the code that needs them, and only additive migrations are allowed in a release so rollback never touches the database. Destructive schema changes ship as a second release once the old code is gone.</figcaption>
+  </figure>
+
+  <div class="callout"><b>Rule that makes the pipeline safe:</b> every migration must be backwards compatible with the currently running API. Add a column now, start writing it in the next release, drop the old one two releases later. This is what lets you roll back code without restoring a backup.</div>
+
+  <h2>6. Launch checklist</h2>
+  <p class="sub">Tick every line before the first external tenant. Owner: whoever is on call that week.</p>
+  <ul class="checklist">
+    <li><span>Repository on GitHub with protected main and required CI.</span></li>
+    <li><span>Tenant-isolation e2e tests pass for every endpoint that accepts an ID.</span></li>
+    <li><span>Role visibility rules documented and tested for all four roles.</span></li>
+    <li><span>Session in httpOnly cookie, refresh rotation, logout revokes.</span></li>
+    <li><span>Rate limiting on login, register, invite, and password reset.</span></li>
+    <li><span>Production JWT secret generated, stored only in platform secrets, rotated at least once to prove the process works.</span></li>
+    <li><span>No import of mock-data.ts remains in web/src.</span></li>
+    <li><span>Managed Postgres with daily backups and PITR, and one restore rehearsed.</span></li>
+    <li><span>Health check hits the database and gates readiness.</span></li>
+    <li><span>Sentry receiving events from both apps, alert routed to a person.</span></li>
+    <li><span>Structured logs with request ID and tenant ID, retained 30 days.</span></li>
+    <li><span>Load test at 2,000 employees: list and dashboard endpoints under 500 ms p95.</span></li>
+    <li><span>Privacy policy, retention policy, and data-deletion runbook written.</span></li>
+    <li><span>Seed passwords and demo tenant do not exist in production.</span></li>
+  </ul>
+
+  <h2>7. Improvements beyond launch</h2>
+  <p class="sub">Not blockers. Ordered by how often HR buyers ask for them in a first demo.</p>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Improvement</th><th>Why it matters</th><th>Effort</th></tr></thead>
+      <tbody>
+        <tr><td>Postgres row-level security</td><td>Turns tenant isolation from "every developer remembers" into "the database refuses". The docs already name this as the missing backstop.</td><td class="num">2 to 3 days</td></tr>
+        <tr><td>SSO with Google Workspace and Microsoft Entra</td><td>Mid-size companies will not roll out another password. WorkOS or Auth.js gets both in a week and keeps your JWT model.</td><td class="num">1 week</td></tr>
+        <tr><td>Manager-scoped and department-scoped views</td><td>The sidebar already promises a department landing. Make the whole app respect "my team" so managers stop seeing the whole company.</td><td class="num">3 to 4 days</td></tr>
+        <tr><td>Notifications</td><td>Leave requested, approved, rejected, and late clock-in, by email first, in-app later. The bell icon in the header is currently decorative.</td><td class="num">3 days</td></tr>
+        <tr><td>Shared contracts package</td><td>One TypeScript package exporting DTO and response types to both apps, so a backend field rename fails the frontend build instead of a customer's screen.</td><td class="num">2 days</td></tr>
+        <tr><td>CSV import and export</td><td>Every onboarding starts with a spreadsheet of employees. Every audit ends with one.</td><td class="num">3 days</td></tr>
+        <tr><td>Document storage</td><td>Offer letters, ID proofs, contracts in S3 or R2 with per-tenant prefixes and signed URLs.</td><td class="num">1 week</td></tr>
+        <tr><td>Recruitment and payroll modules</td><td>Both are in the sidebar as coming soon. Recruitment is straightforward. Payroll is a compliance product on its own, so partner or defer, as the session 1 brainstorm already concluded.</td><td class="num">Quarters</td></tr>
+        <tr><td>OpenAPI docs via @nestjs/swagger</td><td>Free once DTOs are decorated. Customers integrating with their own tools will ask on day one.</td><td class="num">1 day</td></tr>
+        <tr><td>Rename the web dev script away from webpack when the Windows policy allows</td><td>Turbopack is the default and faster. The webpack flag is a workaround for one machine, not a project decision, so leave a note explaining it.</td><td class="num">Hours</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>8. Your first week, concretely</h2>
+  <ol>
+    <li><b>Monday:</b> git init, push, branch protection, CI skeleton. Delete composer leftovers and the stale e2e spec.</li>
+    <li><b>Tuesday:</b> tenant-scope the attendance upsert and employee manager ID. Write the two-tenant e2e test first, watch it fail, then fix.</li>
+    <li><b>Wednesday:</b> role visibility rules for the three read endpoints. Transactional, manager-scoped leave approval.</li>
+    <li><b>Thursday:</b> throttler, helmet, cookie-based session, CORS lock. Generate a real secret.</li>
+    <li><b>Friday:</b> tenant timezone, dynamic department page, and a Dockerfile for the API so staging can exist next week.</li>
+  </ol>
+  <p>By Friday the app is safe to put in front of an internal user on a staging URL. The following four weeks are about replacing mock data and building the operational scaffolding around it.</p>
+</div>
+<script>
+  var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

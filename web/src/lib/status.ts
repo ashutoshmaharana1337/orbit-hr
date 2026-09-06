@@ -1,0 +1,27 @@
+export const statusColors = {
+  good: "#0ca30c",
+  warning: "#c98500",
+  serious: "#ec835a",
+  critical: "#d03b3b",
+  info: "#2a78d6",
+  neutral: "#898781",
+} as const
+
+export const employeeStatusMeta = {
+  active: { color: statusColors.good, label: "Active" },
+  "on-leave": { color: statusColors.warning, label: "On leave" },
+  inactive: { color: statusColors.neutral, label: "Inactive" },
+} as const
+
+export const attendanceStatusMeta = {
+  present: { color: statusColors.good, label: "Present" },
+  late: { color: statusColors.warning, label: "Late" },
+  wfh: { color: statusColors.info, label: "Work from home" },
+  absent: { color: statusColors.critical, label: "Absent" },
+} as const
+
+export const leaveStatusMeta = {
+  pending: { color: statusColors.warning, label: "Pending" },
+  approved: { color: statusColors.good, label: "Approved" },
+  rejected: { color: statusColors.critical, label: "Rejected" },
+} as const
