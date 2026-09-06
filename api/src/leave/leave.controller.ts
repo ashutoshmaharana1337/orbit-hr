@@ -15,12 +15,12 @@ export class LeaveController {
 
   @Get()
   list(@CurrentUser() user: JwtPayload, @Query() query: ListLeaveQuery) {
-    return this.leave.list(user.tenantId, query);
+    return this.leave.list(user.tenantId, user, query);
   }
 
   @Get('balance/:employeeId')
   balance(@CurrentUser() user: JwtPayload, @Param('employeeId') employeeId: string) {
-    return this.leave.balance(user.tenantId, employeeId);
+    return this.leave.balance(user.tenantId, employeeId, user);
   }
 
   @Post()
@@ -31,12 +31,12 @@ export class LeaveController {
   @Patch(':id/approve')
   @Roles('ADMIN', 'HR', 'MANAGER')
   approve(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
-    return this.leave.decide(user.tenantId, id, user.sub, true);
+    return this.leave.decide(user.tenantId, id, user, true);
   }
 
   @Patch(':id/reject')
   @Roles('ADMIN', 'HR', 'MANAGER')
   reject(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
-    return this.leave.decide(user.tenantId, id, user.sub, false);
+    return this.leave.decide(user.tenantId, id, user, false);
   }
 }

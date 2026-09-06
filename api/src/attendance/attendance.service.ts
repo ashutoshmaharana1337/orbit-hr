@@ -69,7 +69,8 @@ export class AttendanceService {
     });
   }
 
-  upsert(tenantId: string, dto: UpsertAttendanceDto) {
+  async upsert(tenantId: string, dto: UpsertAttendanceDto) {
+    await this.employees.assertBelongsToTenant(tenantId, dto.employeeId);
     const date = new Date(dto.date);
     return this.prisma.attendanceRecord.upsert({
       where: { employeeId_date: { employeeId: dto.employeeId, date } },

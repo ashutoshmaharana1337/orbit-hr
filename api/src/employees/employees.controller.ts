@@ -16,12 +16,12 @@ export class EmployeesController {
 
   @Get()
   list(@CurrentUser() user: JwtPayload, @Query() query: ListEmployeesQuery) {
-    return this.employees.list(user.tenantId, query);
+    return this.employees.list(user.tenantId, user, query);
   }
 
   @Get(':id')
   findOne(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
-    return this.employees.findOne(user.tenantId, id);
+    return this.employees.findOne(user.tenantId, id, user);
   }
 
   @Post()
