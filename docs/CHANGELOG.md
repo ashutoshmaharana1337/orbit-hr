@@ -2,7 +2,7 @@
 
 Chronological log of work done on Orbit HR so far. Newest first.
 
-## Session 7 — Production hardening (in progress)
+## Session 7 — Production hardening
 
 Triggered by a full tech-lead-style review
 (`docs/production-readiness-review.html`), verdict "Not yet" — two critical
@@ -45,10 +45,28 @@ believed**:
   with unit tests pinning exact library behavior and e2e tests using fake
   system time to prove the midnight-boundary case.
 
-**Still open**: Postgres row-level security (in progress — a request-
-scoped Prisma provider, not the lighter client-extension approach, to
-avoid a per-query transaction tax), branch protection on `master`, and
-phases 2–6 of the review (the frontend is still on mock data — see
+**Then, as its own effort** (bigger in scope than everything above
+combined — the review itself sizes it at 2–3 days): Postgres row-level
+security as a database-enforced backstop, independent of every
+application-layer `tenantId` filter above. Required two things that only
+became clear while building it — a restricted, non-superuser Postgres
+role (the table owner and any superuser always bypass RLS regardless of
+policy, on every provider, not just this dev box) with a second,
+privileged connection string reserved for migrations; and a narrow,
+explicit "cross-tenant lookup" flag for the few routes (login, register,
+refresh, invite) that inherently have to look up a row before any tenant
+is known. Found and fixed two bugs that only surfaced against a live
+server: Postgres enforces a table's read policy on `INSERT ... RETURNING`
+too, which made every registration's own tenant-creation fail outright at
+first; and wrapping a whole request in one transaction meant a
+deliberately-thrown 401 was silently rolling back the very
+refresh-token-replay defense it was supposed to report. New
+`row-level-security.e2e-spec.ts` proves the database itself refuses an
+unfiltered cross-tenant query, not just that application code remembers
+to filter.
+
+**Still open**: branch protection on `master`, and phases 2–6 of the
+review (the frontend is still on mock data — see
 [06-auth.md](./06-auth.md#known-seams-by-design-not-bugs)).
 
 ## Session 6 — Real login + department landing pages (multi-agent)

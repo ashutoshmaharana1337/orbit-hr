@@ -31,8 +31,9 @@ role ADMIN, 15 employees, today's attendance, 6 leave requests).
 
 ## Architecture
 
-Multi-tenant from the ground up, application-layer isolation (not Postgres
-RLS — see "What's not done yet" below):
+Multi-tenant from the ground up, enforced at two independent layers (see
+[07-production-hardening.md](./07-production-hardening.md) for the full
+story on the second one):
 
 - Every domain table (`Employee`, `AttendanceRecord`, `LeaveRequest`) carries
   a `tenantId`. Every query in every service is scoped by
@@ -43,6 +44,12 @@ RLS — see "What's not done yet" below):
 - `JwtAuthGuard` + `RolesGuard` are applied per-controller
   (`@UseGuards(JwtAuthGuard, RolesGuard)`), with `@Roles('ADMIN', 'HR')` etc.
   gating individual routes.
+- Postgres row-level security backs all of the above: a global
+  `TenantTransactionInterceptor` sets a per-request session variable every
+  RLS policy checks, so even a query that forgot its `tenantId` filter
+  gets refused by the database itself, not just by application code. The
+  app connects as a restricted role with no `BYPASSRLS`, not the
+  migration role — see `api/src/prisma/`.
 
 ### Modules
 
@@ -134,9 +141,8 @@ which covers everything below except the frontend gap:
   [07-production-hardening.md](./07-production-hardening.md#phase-1--security-and-correctness).
   `POST /employees/:id/invite` (ADMIN/HR) creates a login for an existing
   `Employee`.
-- **Postgres RLS not implemented yet** (in progress) — tenant isolation is
-  still enforced entirely in the application layer. See
-  [07-production-hardening.md](./07-production-hardening.md#not-yet-done).
+- ~~Postgres RLS not implemented~~ — fixed, see
+  [07-production-hardening.md](./07-production-hardening.md#high-postgres-row-level-security).
 - **Frontend still runs entirely on mock data.** `web/` has not been wired
   to call this API yet — that's the natural next step (auth pages, token
   storage, replacing `src/lib/mock-data.ts` reads with fetches).

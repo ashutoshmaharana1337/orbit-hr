@@ -10,6 +10,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 import { CurrentUser } from './decorators/current-user.decorator.js';
 import type { JwtPayload } from './auth.types.js';
 import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE, baseCookieOptions } from './auth.constants.js';
+import { BypassTenantRls } from '../prisma/bypass-tenant-rls.decorator.js';
 
 // Credential-guessing and tenant-spam endpoints get a much tighter limit
 // than the app-wide default.
@@ -21,6 +22,7 @@ export class AuthController {
 
   @Post('register')
   @Throttle(AUTH_THROTTLE)
+  @BypassTenantRls()
   async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) res: Response) {
     const { profile, accessToken, refreshToken, refreshTokenExpiresAt } = await this.auth.register(dto);
     setAuthCookies(res, accessToken, refreshToken, refreshTokenExpiresAt);
@@ -30,6 +32,7 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @Throttle(AUTH_THROTTLE)
+  @BypassTenantRls()
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
     const { profile, accessToken, refreshToken, refreshTokenExpiresAt } = await this.auth.login(dto);
     setAuthCookies(res, accessToken, refreshToken, refreshTokenExpiresAt);
@@ -38,6 +41,7 @@ export class AuthController {
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
+  @BypassTenantRls()
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const { profile, accessToken, refreshToken, refreshTokenExpiresAt } = await this.auth.refresh(
       req.cookies?.[REFRESH_TOKEN_COOKIE],
@@ -48,6 +52,7 @@ export class AuthController {
 
   @Post('logout')
   @HttpCode(HttpStatus.OK)
+  @BypassTenantRls()
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     await this.auth.logout(req.cookies?.[REFRESH_TOKEN_COOKIE]);
     res.clearCookie(ACCESS_TOKEN_COOKIE, { path: '/' });
@@ -58,6 +63,7 @@ export class AuthController {
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
   @Throttle(AUTH_THROTTLE)
+  @BypassTenantRls()
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
     await this.auth.forgotPassword(dto.email);
     return { success: true };
@@ -66,6 +72,7 @@ export class AuthController {
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
   @Throttle(AUTH_THROTTLE)
+  @BypassTenantRls()
   async resetPassword(@Body() dto: ResetPasswordDto, @Res({ passthrough: true }) res: Response) {
     const { profile, accessToken, refreshToken, refreshTokenExpiresAt } = await this.auth.resetPassword(
       dto.token,

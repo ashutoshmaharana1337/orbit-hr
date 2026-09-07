@@ -26,7 +26,13 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://orbit:orbit_ci_password@localhost:5432/orbit_hr_ci?schema=public
+      # Restricted role, no BYPASSRLS — the app's runtime connection, so RLS
+      # policies actually apply. Created by the enable_row_level_security
+      # migration; only exists once `prisma migrate deploy` has run.
+      DATABASE_URL: postgresql://orbit_app:orbit_app_dev_password@localhost:5432/orbit_hr_ci?schema=public
+      # Privileged role (the Postgres service's own POSTGRES_USER) — only
+      # Prisma CLI commands (migrate, generate) use this.
+      DIRECT_DATABASE_URL: postgresql://orbit:orbit_ci_password@localhost:5432/orbit_hr_ci?schema=public
       JWT_SECRET: ci-secret-not-for-production
       JWT_EXPIRES_IN: 1d
       PORT: 3001

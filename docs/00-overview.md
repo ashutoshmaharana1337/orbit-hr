@@ -20,12 +20,16 @@ built so far. Read them in order, or jump to what you need:
   still read from mock in-memory data (`src/lib/mock-data.ts`) — auth is
   the first (and so far only) part of `web/` talking to the real API. See
   [06-auth.md](./06-auth.md).
-- **Backend**: `api/` — NestJS 12 + PostgreSQL + Prisma, multi-tenant
-  (application-layer isolation — see below), JWT auth in httpOnly cookies
-  with rotating refresh tokens, rate limiting, an invite/password-reset
-  flow, and tenant-timezone-aware attendance. Modules: auth, employees,
-  attendance, leave, tenant. Verified end-to-end (register, login, tenant
-  isolation, role-scoped reads, CRUD, leave approval balance updates,
+- **Backend**: `api/` — NestJS 12 + PostgreSQL + Prisma, tenant isolation
+  enforced at **both** the application layer (every query scoped by
+  `tenantId`) and the database layer (Postgres row-level security via a
+  restricted `orbit_app` role — the app no longer connects as a
+  superuser, which would silently bypass every policy), JWT auth in
+  httpOnly cookies with rotating refresh tokens, rate limiting, an
+  invite/password-reset flow, and tenant-timezone-aware attendance.
+  Modules: auth, employees, attendance, leave, tenant. Verified
+  end-to-end (register, login, tenant isolation at both layers,
+  role-scoped reads, CRUD, leave approval balance updates,
   cookie/refresh/logout, invite/reset, timezone boundaries) — see
   [05-backend.md](./05-backend.md) and
   [07-production-hardening.md](./07-production-hardening.md). Local
@@ -34,9 +38,8 @@ built so far. Read them in order, or jump to what you need:
   ([07-production-hardening.md](./07-production-hardening.md)) instead of
   living only on a synced desktop.
 - **Not yet done**: connecting the Employees/Attendance/Leave *screens* to
-  the real API (they're still mock data even though login is real),
-  Postgres row-level security (in progress), branch protection on
-  `master`. Full lists in
+  the real API (they're still mock data even though login is real), and
+  branch protection on `master`. Full lists in
   [07-production-hardening.md](./07-production-hardening.md#not-yet-done)
   and [06-auth.md](./06-auth.md#known-seams-by-design-not-bugs).
 

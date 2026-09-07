@@ -92,28 +92,26 @@ export class LeaveService {
       }
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      if (approve && (request.type === 'ANNUAL' || request.type === 'SICK')) {
-        const balance = await tx.leaveBalance.findUniqueOrThrow({ where: { employeeId: request.employeeId } });
-        const field = request.type === 'ANNUAL' ? 'annualUsed' : 'sickUsed';
-        const total = request.type === 'ANNUAL' ? balance.annualTotal : balance.sickTotal;
-        if (balance[field] + request.days > total) {
-          throw new BadRequestException('Approving this request would exceed the remaining leave balance');
-        }
-        await tx.leaveBalance.update({
-          where: { employeeId: request.employeeId },
-          data: { [field]: { increment: request.days } },
-        });
+    if (approve && (request.type === 'ANNUAL' || request.type === 'SICK')) {
+      const balance = await this.prisma.leaveBalance.findUniqueOrThrow({ where: { employeeId: request.employeeId } });
+      const field = request.type === 'ANNUAL' ? 'annualUsed' : 'sickUsed';
+      const total = request.type === 'ANNUAL' ? balance.annualTotal : balance.sickTotal;
+      if (balance[field] + request.days > total) {
+        throw new BadRequestException('Approving this request would exceed the remaining leave balance');
       }
-
-      return tx.leaveRequest.update({
-        where: { id },
-        data: {
-          status: approve ? 'APPROVED' : 'REJECTED',
-          decidedAt: new Date(),
-          decidedBy: approver.sub,
-        },
+      await this.prisma.leaveBalance.update({
+        where: { employeeId: request.employeeId },
+        data: { [field]: { increment: request.days } },
       });
+    }
+
+    return this.prisma.leaveRequest.update({
+      where: { id },
+      data: {
+        status: approve ? 'APPROVED' : 'REJECTED',
+        decidedAt: new Date(),
+        decidedBy: approver.sub,
+      },
     });
   }
 
