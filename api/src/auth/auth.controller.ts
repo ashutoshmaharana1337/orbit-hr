@@ -1,4 +1,5 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service.js';
 import { RegisterDto } from './dto/register.dto.js';
@@ -8,11 +9,16 @@ import { CurrentUser } from './decorators/current-user.decorator.js';
 import type { JwtPayload } from './auth.types.js';
 import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE, baseCookieOptions } from './auth.constants.js';
 
+// Credential-guessing and tenant-spam endpoints get a much tighter limit
+// than the app-wide default.
+const AUTH_THROTTLE = { default: { limit: 5, ttl: 60_000 } };
+
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
   @Post('register')
+  @Throttle(AUTH_THROTTLE)
   async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) res: Response) {
     const { profile, accessToken, refreshToken, refreshTokenExpiresAt } = await this.auth.register(dto);
     setAuthCookies(res, accessToken, refreshToken, refreshTokenExpiresAt);
@@ -21,6 +27,7 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @Throttle(AUTH_THROTTLE)
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
     const { profile, accessToken, refreshToken, refreshTokenExpiresAt } = await this.auth.login(dto);
     setAuthCookies(res, accessToken, refreshToken, refreshTokenExpiresAt);
