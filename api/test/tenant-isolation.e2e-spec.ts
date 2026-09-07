@@ -39,15 +39,11 @@ describe('Tenant isolation and role visibility (e2e)', () => {
       .post('/api/auth/register')
       .send({ companyName, fullName: 'Admin User', email, password: 'password123' })
       .expect(201);
-    const accessToken = res.body.accessToken as string;
-    const me = await request(app.getHttpServer())
-      .get('/api/auth/me')
-      .set('Authorization', `Bearer ${accessToken}`)
-      .expect(200);
+    const profile = res.body as { id: string; email: string; role: JwtPayload['role']; tenant: { id: string }; employee: { id: string } };
     return {
-      accessToken,
-      tenantId: me.body.tenant.id as string,
-      adminEmployeeId: me.body.employee.id as string,
+      accessToken: tokenFor({ sub: profile.id, tenantId: profile.tenant.id, email: profile.email, role: profile.role }),
+      tenantId: profile.tenant.id,
+      adminEmployeeId: profile.employee.id,
     };
   }
 
