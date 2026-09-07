@@ -3,6 +3,8 @@ import { EmployeesService } from './employees.service.js';
 import { CreateEmployeeDto } from './dto/create-employee.dto.js';
 import { UpdateEmployeeDto } from './dto/update-employee.dto.js';
 import { ListEmployeesQuery } from './dto/list-employees.query.js';
+import { InviteEmployeeDto } from './dto/invite-employee.dto.js';
+import { AuthService } from '../auth/auth.service.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
@@ -12,7 +14,10 @@ import type { JwtPayload } from '../auth/auth.types.js';
 @Controller('employees')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class EmployeesController {
-  constructor(private readonly employees: EmployeesService) {}
+  constructor(
+    private readonly employees: EmployeesService,
+    private readonly auth: AuthService,
+  ) {}
 
   @Get()
   list(@CurrentUser() user: JwtPayload, @Query() query: ListEmployeesQuery) {
@@ -34,5 +39,11 @@ export class EmployeesController {
   @Roles('ADMIN', 'HR')
   update(@CurrentUser() user: JwtPayload, @Param('id') id: string, @Body() dto: UpdateEmployeeDto) {
     return this.employees.update(user.tenantId, id, dto);
+  }
+
+  @Post(':id/invite')
+  @Roles('ADMIN', 'HR')
+  invite(@CurrentUser() user: JwtPayload, @Param('id') id: string, @Body() dto: InviteEmployeeDto) {
+    return this.auth.invite(user.tenantId, id, dto.role ?? 'EMPLOYEE');
   }
 }

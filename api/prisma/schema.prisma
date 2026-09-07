@@ -40,6 +40,11 @@ enum LeaveStatus {
   REJECTED
 }
 
+enum PasswordTokenPurpose {
+  INVITE
+  RESET
+}
+
 model Tenant {
   id        String   @id @default(uuid())
   name      String
@@ -60,9 +65,10 @@ model User {
   role         UserRole @default(EMPLOYEE)
   createdAt    DateTime @default(now())
 
-  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  employee      Employee?
-  refreshTokens RefreshToken[]
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee          Employee?
+  refreshTokens     RefreshToken[]
+  passwordSetTokens PasswordSetToken[]
 
   @@index([tenantId])
 }
@@ -74,6 +80,20 @@ model RefreshToken {
   expiresAt DateTime
   revokedAt DateTime?
   createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PasswordSetToken {
+  id        String               @id @default(uuid())
+  userId    String
+  tokenHash String               @unique
+  purpose   PasswordTokenPurpose
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime             @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
