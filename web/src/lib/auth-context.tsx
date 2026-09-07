@@ -28,12 +28,7 @@ export type AuthUser = {
   employee: AuthEmployee | null
 }
 
-type MeResponse = AuthUser
-
-type LoginResponse = { accessToken: string }
-
 type AuthState = {
-  token: string | null
   user: AuthUser | null
   employee: AuthEmployee | null
   loading: boolean
@@ -44,64 +39,42 @@ type AuthContextValue = AuthState & {
   logout: () => void
 }
 
-const TOKEN_KEY = "orbit_token"
-
 const AuthContext = React.createContext<AuthContextValue | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = React.useState<AuthState>({
-    token: null,
     user: null,
     employee: null,
     loading: true,
   })
 
+  // The session lives in an httpOnly cookie, invisible to this code — the
+  // only way to know whether one exists is to ask the server.
   React.useEffect(() => {
-    const storedToken = window.localStorage.getItem(TOKEN_KEY)
-    if (!storedToken) {
-      queueMicrotask(() => setState((s) => ({ ...s, loading: false })))
-      return
-    }
-
-    apiFetch<MeResponse>("/auth/me", { token: storedToken })
-      .then((me) => {
-        setState({
-          token: storedToken,
-          user: me,
-          employee: me.employee,
-          loading: false,
-        })
-      })
-      .catch(() => {
-        window.localStorage.removeItem(TOKEN_KEY)
-        setState({ token: null, user: null, employee: null, loading: false })
-      })
+    apiFetch<AuthUser>("/auth/me")
+      .then((me) => setState({ user: me, employee: me.employee, loading: false }))
+      .catch(() => setState({ user: null, employee: null, loading: false }))
   }, [])
 
   const login = React.useCallback(async (email: string, password: string) => {
-    const { accessToken } = await apiFetch<LoginResponse>("/auth/login", {
+    const me = await apiFetch<AuthUser>("/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     })
 
-    window.localStorage.setItem(TOKEN_KEY, accessToken)
-
-    const me = await apiFetch<MeResponse>("/auth/me", { token: accessToken })
-
-    setState({
-      token: accessToken,
-      user: me,
-      employee: me.employee,
-      loading: false,
-    })
-
+    setState({ user: me, employee: me.employee, loading: false })
     return me.employee
   }, [])
 
   const logout = React.useCallback(() => {
-    window.localStorage.removeItem(TOKEN_KEY)
-    setState({ token: null, user: null, employee: null, loading: false })
-    window.location.href = "/login"
+    apiFetch("/auth/logout", { method: "POST" })
+      .catch(() => {
+        // Best-effort revoke — clear local state and redirect regardless.
+      })
+      .finally(() => {
+        setState({ user: null, employee: null, loading: false })
+        window.location.href = "/login"
+      })
   }, [])
 
   const value = React.useMemo<AuthContextValue>(
