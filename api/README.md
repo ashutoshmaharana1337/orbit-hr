@@ -39,6 +39,15 @@ client explicitly before building, testing, or starting the app:
 $ npx prisma generate
 ```
 
+You'll also need two connection strings in `.env` (see `.env.example`):
+`DATABASE_URL` for a restricted `orbit_app` role the app runs as (Postgres
+row-level security only means anything against a non-superuser role — see
+`docs/07-production-hardening.md`), and `DIRECT_DATABASE_URL` for the
+privileged role `prisma migrate`/`generate` use to create that restricted
+role and manage RLS policies. Local Postgres via `docker-compose.yml` only
+creates the privileged role; the migration creates the restricted one the
+first time you run `prisma migrate deploy`.
+
 ## Compile and run the project
 
 ```bash

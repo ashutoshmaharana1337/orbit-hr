@@ -99,9 +99,11 @@ describe('Tenant timezone drives attendance business-date and late cutoff (e2e)'
     const meRes = await admin.get('/api/auth/me').expect(200);
     const tenantId = meRes.body.tenant.id as string;
 
-    const employeeUser = await prisma.user.create({
-      data: { tenantId, email: `settings-employee-${Date.now()}@example.com`, passwordHash: 'x', role: 'EMPLOYEE' },
-    });
+    const employeeUser = await prisma.runInTenantContext({ tenantId }, () =>
+      prisma.user.create({
+        data: { tenantId, email: `settings-employee-${Date.now()}@example.com`, passwordHash: 'x', role: 'EMPLOYEE' },
+      }),
+    );
     const employeeToken = jwt.sign({
       sub: employeeUser.id,
       tenantId,

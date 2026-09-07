@@ -95,40 +95,50 @@ describe('Tenant isolation and role visibility (e2e)', () => {
       })
       .expect(201);
 
-    await prisma.leaveRequest.create({
-      data: {
-        tenantId: tenant.tenantId,
-        employeeId: colleague.body.id,
-        type: 'ANNUAL',
-        startDate: new Date('2026-10-01'),
-        endDate: new Date('2026-10-02'),
-        days: 2,
-        reason: 'Private medical reason',
-      },
-    });
+    // Direct fixture setup, bypassing the real HTTP flow — needs the same
+    // tenant context a real request would get from TenantTransactionInterceptor,
+    // since these tables are RLS-protected too.
+    const { bystanderUser, bystanderEmployee } = await prisma.runInTenantContext(
+      { tenantId: tenant.tenantId },
+      async () => {
+        await prisma.leaveRequest.create({
+          data: {
+            tenantId: tenant.tenantId,
+            employeeId: colleague.body.id,
+            type: 'ANNUAL',
+            startDate: new Date('2026-10-01'),
+            endDate: new Date('2026-10-02'),
+            days: 2,
+            reason: 'Private medical reason',
+          },
+        });
 
-    const bystanderUser = await prisma.user.create({
-      data: {
-        tenantId: tenant.tenantId,
-        email: `bystander-${Date.now()}@example.com`,
-        passwordHash: 'x',
-        role: 'EMPLOYEE',
+        const bystanderUser = await prisma.user.create({
+          data: {
+            tenantId: tenant.tenantId,
+            email: `bystander-${Date.now()}@example.com`,
+            passwordHash: 'x',
+            role: 'EMPLOYEE',
+          },
+        });
+        const bystanderEmployee = await prisma.employee.create({
+          data: {
+            tenantId: tenant.tenantId,
+            userId: bystanderUser.id,
+            name: 'Bystander',
+            email: bystanderUser.email,
+            title: 'Intern',
+            department: 'Engineering',
+            location: 'Remote',
+            joinDate: new Date(),
+            phone: '',
+            leaveBalance: { create: {} },
+          },
+        });
+
+        return { bystanderUser, bystanderEmployee };
       },
-    });
-    const bystanderEmployee = await prisma.employee.create({
-      data: {
-        tenantId: tenant.tenantId,
-        userId: bystanderUser.id,
-        name: 'Bystander',
-        email: bystanderUser.email,
-        title: 'Intern',
-        department: 'Engineering',
-        location: 'Remote',
-        joinDate: new Date(),
-        phone: '',
-        leaveBalance: { create: {} },
-      },
-    });
+    );
     const bystanderToken = tokenFor({
       sub: bystanderUser.id,
       tenantId: tenant.tenantId,

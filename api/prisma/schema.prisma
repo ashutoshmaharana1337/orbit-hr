@@ -3,8 +3,14 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // The app's runtime connection — a restricted role with no BYPASSRLS,
+  // so Postgres row-level security actually applies to it.
+  url       = env("DATABASE_URL")
+  // Only Prisma CLI commands (migrate, generate) use this — the
+  // privileged role needed to create the restricted role above, grant
+  // it privileges, and manage RLS policies. Never used at app runtime.
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 enum UserRole {

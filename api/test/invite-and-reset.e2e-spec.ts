@@ -170,15 +170,17 @@ describe('Invite and password reset (e2e)', () => {
 
   it('rejects an expired reset token', async () => {
     const email = `expired-${Date.now()}@example.com`;
-    await registerAdmin(email);
+    const { tenantId } = await registerAdmin(email);
 
     await request(app.getHttpServer()).post('/api/auth/forgot-password').send({ email }).expect(200);
     const token = extractToken(sentEmails[0].text);
 
-    await prisma.passwordSetToken.update({
-      where: { tokenHash: hashToken(token) },
-      data: { expiresAt: new Date(Date.now() - 1000) },
-    });
+    await prisma.runInTenantContext({ tenantId }, () =>
+      prisma.passwordSetToken.update({
+        where: { tokenHash: hashToken(token) },
+        data: { expiresAt: new Date(Date.now() - 1000) },
+      }),
+    );
 
     await request(app.getHttpServer())
       .post('/api/auth/reset-password')

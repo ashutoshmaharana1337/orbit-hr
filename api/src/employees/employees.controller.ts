@@ -10,6 +10,7 @@ import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import type { JwtPayload } from '../auth/auth.types.js';
+import { BypassTenantRls } from '../prisma/bypass-tenant-rls.decorator.js';
 
 @Controller('employees')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -43,6 +44,7 @@ export class EmployeesController {
 
   @Post(':id/invite')
   @Roles('ADMIN', 'HR')
+  @BypassTenantRls() // needs to check the invited email for a login in ANY tenant, not just this one
   invite(@CurrentUser() user: JwtPayload, @Param('id') id: string, @Body() dto: InviteEmployeeDto) {
     return this.auth.invite(user.tenantId, id, dto.role ?? 'EMPLOYEE');
   }

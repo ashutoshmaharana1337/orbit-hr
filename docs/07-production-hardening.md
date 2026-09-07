@@ -122,16 +122,87 @@ empirically with a throwaway script before relying on it, then pinned
 `process.env.TZ = 'UTC'` in `main.ts` and both vitest configs so it's true
 everywhere the app runs, not just by deployment-environment accident.
 
+### High: Postgres row-level security
+
+Every service already scopes its own queries by `tenantId` (see above) —
+but that's an *application-layer* guarantee: it holds only as long as
+every query everywhere remembers the filter. This adds the
+database-level backstop the review calls for: even a query that forgets
+its `tenantId` clause entirely now gets refused by Postgres itself, not
+just by careful code review.
+
+This turned out to be the single most architecturally invasive change in
+the whole hardening pass — bigger in scope than the cookie/refresh-token
+work — for two reasons that only became clear once building it started:
+
+1. **The table owner and any Postgres superuser always bypass RLS**,
+   regardless of policies — including `FORCE ROW LEVEL SECURITY`, which
+   only affects non-superuser table owners. This isn't a dev-only quirk:
+   every managed Postgres provider's default app role has this problem
+   too (it's exactly why Supabase's PostgREST layer authenticates as a
+   separate `authenticated`/`anon` role, never as `postgres`). Confirmed
+   empirically that this dev Postgres's `orbit` role has `rolbypassrls=t`
+   before writing a single policy, rather than assuming. Fixed by adding
+   a new migration-created role, `orbit_app` — `NOSUPERUSER NOBYPASSRLS`
+   — that the app's `DATABASE_URL` now points at, while `prisma migrate`/
+   `generate` use a new `DIRECT_DATABASE_URL` (the privileged role) via
+   Prisma's `directUrl` datasource field.
+2. **Login and registration are inherently cross-tenant lookups** — you
+   look up a `User` by email *before* you know their tenant, which is
+   incompatible with a naive tenant-scoped policy on `User`. Solved with
+   an explicit, narrow `app.bypass_rls` session flag that only the
+   handful of routes needing it set (`@BypassTenantRls()`) — and that
+   only ever widens *read* visibility on the three tables whose policies
+   reference it (`User`, `RefreshToken`, `PasswordSetToken`); every
+   write's `WITH CHECK` on the tenant-bearing tables ignores the flag
+   entirely, so a write can never land under the wrong tenant no matter
+   which routes have it set.
+
+**Mechanism** (`api/src/prisma/`): a global `TenantTransactionInterceptor`
+wraps every HTTP request in one Prisma interactive transaction, sets
+`app.current_tenant_id` (from the JWT) and `app.bypass_rls` (only where
+`@BypassTenantRls()` says so) once per request, and makes that transaction
+the active connection for the request's duration via `AsyncLocalStorage` —
+so every existing `this.prisma.employee.findMany()`-style call site kept
+working with zero changes. The four services that previously wrapped
+their own multi-step writes in their own nested `$transaction()` calls
+(`register()`, `invite()`, `resetPassword()`, `leave.decide()`) had that
+wrapper removed — they're already atomic as part of the one outer
+per-request transaction.
+
+**Two bugs found only by actually running it against a live server**,
+not by reasoning about the design on paper:
+
+- Postgres enforces a table's `SELECT` policy on an `INSERT ... RETURNING`
+  clause too, not just `WITH CHECK` on the write. Prisma's `.create()`
+  always uses `RETURNING`. Since a brand-new tenant's id can never already
+  equal `app.current_tenant_id` — that's the whole chicken-and-egg problem
+  registration has to solve — the first version of `Tenant`'s policy made
+  every single registration fail on its own `INSERT`. Fixed in a follow-up
+  migration by letting `Tenant`'s read visibility honor `bypass_rls` too
+  (`register()` already sets it for the unrelated email/slug-uniqueness
+  checks).
+- Wrapping the whole request in one transaction means a deliberately
+  *thrown* exception (an intentional 401/403/404/409, not a bug) would
+  roll back writes made just before it — silently undoing the
+  refresh-token-replay defense, which revokes a user's whole session
+  family and *then* throws `Unauthorized`. Fixed by having
+  `PrismaService.runInTenantContext()` distinguish an `HttpException`
+  (commit what came before it, then re-throw after) from a genuinely
+  unexpected error (roll back, as intended) — see the comment on that
+  method for the reasoning.
+
+New `api/test/row-level-security.e2e-spec.ts` proves the actual point of
+this work: an unfiltered `employee.findMany()` under one tenant's context
+returns only that tenant's row even with no `WHERE` clause at all, an
+update targeting another tenant's row by its exact id is refused, and a
+query with no tenant context set returns nothing (fails closed, not
+open) — plus the existing e2e suites (tenant isolation, cookies, invite/
+reset, timezone) all still pass unmodified against the RLS-enforced
+database, confirming the backstop didn't just move the bug, it closed it.
+
 ### Not yet done
 
-- **Postgres row-level security.** In progress — being built as a
-  request-scoped Prisma provider (session variable set per request, RLS
-  policies on the tenant-scoped tables) rather than the lighter-weight
-  "wrap every query in its own mini-transaction" client-extension
-  approach, to avoid a DB round-trip tax on every single query. This is
-  the single most architecturally invasive item in the whole roadmap —
-  sized at 2–3 days even in the source review's own estimate — so it's
-  being tracked as its own effort rather than folded into a quick pass.
 - Branch protection on `master`.
 - Everything in phases 2–6 of the review: wiring `web/` off mock data,
   `Department`/`LeavePolicy`/`AuditLog` tables, a Playwright smoke suite,

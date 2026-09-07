@@ -1,7 +1,13 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 
-const prisma = new PrismaClient();
+// Seeding is a system-level bootstrap, not simulated user traffic — it
+// needs to write rows for a tenant it creates itself, across every table,
+// with no per-request tenant context. Connect with the privileged role
+// (bypasses RLS) rather than the app's restricted runtime role.
+const prisma = new PrismaClient({
+  datasources: { db: { url: process.env.DIRECT_DATABASE_URL } },
+});
 
 const departments = ['Engineering', 'Design', 'Sales', 'Marketing', 'People', 'Finance'] as const;
 
