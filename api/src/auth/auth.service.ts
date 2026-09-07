@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from 'node:crypto';
 import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
@@ -15,6 +16,12 @@ function slugify(name: string) {
       .replace(/(^-|-$)/g, '') || 'workspace'
   );
 }
+
+function hashToken(raw: string) {
+  return createHash('sha256').update(raw).digest('hex');
+}
+
+const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 @Injectable()
 export class AuthService {
@@ -71,7 +78,7 @@ export class AuthService {
       return { tenant, user };
     });
 
-    return this.issueToken({ sub: user.id, tenantId: tenant.id, email: user.email, role: user.role });
+    return this.issueSession({ sub: user.id, tenantId: tenant.id, email: user.email, role: user.role });
   }
 
   async login(dto: LoginDto) {
@@ -81,12 +88,55 @@ export class AuthService {
     const valid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!valid) throw new UnauthorizedException('Invalid email or password');
 
-    return this.issueToken({ sub: user.id, tenantId: user.tenantId, email: user.email, role: user.role });
+    return this.issueSession({ sub: user.id, tenantId: user.tenantId, email: user.email, role: user.role });
+  }
+
+  async refresh(rawRefreshToken: string | undefined) {
+    if (!rawRefreshToken) throw new UnauthorizedException('Missing refresh token');
+
+    const tokenHash = hashToken(rawRefreshToken);
+    const existing = await this.prisma.refreshToken.findUnique({ where: { tokenHash } });
+
+    if (!existing || existing.expiresAt < new Date()) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    if (existing.revokedAt) {
+      // This token was already rotated out. Someone is replaying an old
+      // refresh token — treat it as theft and kill every active session
+      // for this user rather than trusting the presenter.
+      await this.prisma.refreshToken.updateMany({
+        where: { userId: existing.userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      throw new UnauthorizedException('Refresh token has already been used');
+    }
+
+    await this.prisma.refreshToken.update({
+      where: { id: existing.id },
+      data: { revokedAt: new Date() },
+    });
+
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: existing.userId } });
+    return this.issueSession({ sub: user.id, tenantId: user.tenantId, email: user.email, role: user.role });
+  }
+
+  async logout(rawRefreshToken: string | undefined) {
+    if (!rawRefreshToken) return;
+    const tokenHash = hashToken(rawRefreshToken);
+    await this.prisma.refreshToken.updateMany({
+      where: { tokenHash, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
   }
 
   async me(payload: JwtPayload) {
+    return this.buildProfile(payload.sub);
+  }
+
+  private async buildProfile(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({
-      where: { id: payload.sub },
+      where: { id: userId },
       include: { employee: true, tenant: true },
     });
     return {
@@ -98,7 +148,16 @@ export class AuthService {
     };
   }
 
-  private issueToken(payload: JwtPayload) {
-    return { accessToken: this.jwt.sign(payload) };
+  private async issueSession(payload: JwtPayload) {
+    const accessToken = this.jwt.sign(payload);
+
+    const refreshToken = randomBytes(48).toString('hex');
+    const refreshTokenExpiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
+    await this.prisma.refreshToken.create({
+      data: { userId: payload.sub, tokenHash: hashToken(refreshToken), expiresAt: refreshTokenExpiresAt },
+    });
+
+    const profile = await this.buildProfile(payload.sub);
+    return { profile, accessToken, refreshToken, refreshTokenExpiresAt };
   }
 }
