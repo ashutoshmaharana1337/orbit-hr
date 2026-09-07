@@ -4,6 +4,11 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { AppModule } from './app.module.js';
 
+// Tenant-timezone math (see attendance/business-time.ts) relies on the
+// process's own local timezone being UTC — pin it explicitly rather than
+// hoping the deployment environment defaults to UTC.
+process.env.TZ = 'UTC';
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 

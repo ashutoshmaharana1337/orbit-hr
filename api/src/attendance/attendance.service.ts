@@ -1,13 +1,8 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { EmployeesService } from '../employees/employees.service.js';
+import { businessDateUTC, minutesSinceLocalMidnight } from './business-time.js';
 import type { UpsertAttendanceDto } from './dto/upsert-attendance.dto.js';
-
-function startOfToday() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
 
 @Injectable()
 export class AttendanceService {
@@ -16,34 +11,45 @@ export class AttendanceService {
     private readonly employees: EmployeesService,
   ) {}
 
-  today(tenantId: string) {
+  private async getTenantTimeSettings(tenantId: string) {
+    const tenant = await this.prisma.tenant.findUniqueOrThrow({
+      where: { id: tenantId },
+      select: { timezone: true, lateCutoffMinutes: true },
+    });
+    return tenant;
+  }
+
+  async today(tenantId: string) {
+    const { timezone } = await this.getTenantTimeSettings(tenantId);
     return this.prisma.attendanceRecord.findMany({
-      where: { tenantId, date: startOfToday() },
+      where: { tenantId, date: businessDateUTC(timezone) },
       include: { employee: { select: { id: true, name: true, department: true } } },
       orderBy: { employee: { name: 'asc' } },
     });
   }
 
   async summary(tenantId: string) {
+    const { timezone } = await this.getTenantTimeSettings(tenantId);
     const grouped = await this.prisma.attendanceRecord.groupBy({
       by: ['status'],
-      where: { tenantId, date: startOfToday() },
+      where: { tenantId, date: businessDateUTC(timezone) },
       _count: true,
     });
     return grouped.map((g) => ({ status: g.status, count: g._count }));
   }
 
   async clockIn(tenantId: string, userId: string) {
+    const { timezone, lateCutoffMinutes } = await this.getTenantTimeSettings(tenantId);
     const employee = await this.employees.findByUserId(tenantId, userId);
-    const date = startOfToday();
+    const now = new Date();
+    const date = businessDateUTC(timezone, now);
 
     const existing = await this.prisma.attendanceRecord.findUnique({
       where: { employeeId_date: { employeeId: employee.id, date } },
     });
     if (existing) throw new ConflictException('Already clocked in today');
 
-    const now = new Date();
-    const status = now.getHours() >= 10 ? 'LATE' : 'PRESENT';
+    const status = minutesSinceLocalMidnight(timezone, now) >= lateCutoffMinutes ? 'LATE' : 'PRESENT';
 
     return this.prisma.attendanceRecord.create({
       data: { tenantId, employeeId: employee.id, date, status, clockIn: now, hours: 0 },
@@ -51,8 +57,9 @@ export class AttendanceService {
   }
 
   async clockOut(tenantId: string, userId: string) {
+    const { timezone } = await this.getTenantTimeSettings(tenantId);
     const employee = await this.employees.findByUserId(tenantId, userId);
-    const date = startOfToday();
+    const date = businessDateUTC(timezone);
 
     const record = await this.prisma.attendanceRecord.findUnique({
       where: { employeeId_date: { employeeId: employee.id, date } },

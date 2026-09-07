@@ -9,6 +9,7 @@ import { AuthModule } from './auth/auth.module.js';
 import { EmployeesModule } from './employees/employees.module.js';
 import { AttendanceModule } from './attendance/attendance.module.js';
 import { LeaveModule } from './leave/leave.module.js';
+import { TenantModule } from './tenant/tenant.module.js';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { LeaveModule } from './leave/leave.module.js';
     EmployeesModule,
     AttendanceModule,
     LeaveModule,
+    TenantModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
