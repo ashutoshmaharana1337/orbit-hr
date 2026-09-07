@@ -48,10 +48,11 @@ RLS — see "What's not done yet" below):
 
 | Module | Routes | Notes |
 |---|---|---|
-| `auth` | `POST /auth/register`, `POST /auth/login`, `GET /auth/me` | Register creates a **Tenant + ADMIN User + Employee** in one transaction — this is the "company sign-up" flow, not an individual invite flow (see gaps below) |
-| `employees` | `GET /employees`, `GET /employees/:id`, `POST /employees` (ADMIN/HR), `PATCH /employees/:id` (ADMIN/HR) | List supports `?search=&department=&status=` |
-| `attendance` | `GET /attendance/today`, `GET /attendance/summary`, `POST /attendance/clock-in`, `PATCH /attendance/clock-out`, `POST /attendance` (ADMIN/HR/MANAGER, direct upsert) | Clock-in resolves the caller's own `Employee` row via their `userId`; one record per employee per day (`@@unique([employeeId, date])`) |
-| `leave` | `GET /leave`, `GET /leave/balance/:employeeId`, `POST /leave`, `PATCH /leave/:id/approve` (ADMIN/HR/MANAGER), `PATCH /leave/:id/reject` (ADMIN/HR/MANAGER) | Approving an `ANNUAL` or `SICK` request increments the matching `LeaveBalance` field; re-deciding an already-decided request is a 400 |
+| `auth` | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `POST /auth/forgot-password`, `POST /auth/reset-password`, `GET /auth/me` | Register creates a **Tenant + ADMIN User + Employee** in one transaction (company sign-up); individual logins for existing employees come from `employees.invite` below, not this module. Session is an httpOnly-cookie access token + rotating refresh token — see [07-production-hardening.md](./07-production-hardening.md) |
+| `employees` | `GET /employees`, `GET /employees/:id`, `POST /employees` (ADMIN/HR), `PATCH /employees/:id` (ADMIN/HR), `POST /employees/:id/invite` (ADMIN/HR) | List supports `?search=&department=&status=`; reads are role-scoped (self/reports/tenant depending on role) |
+| `attendance` | `GET /attendance/today`, `GET /attendance/summary`, `POST /attendance/clock-in`, `PATCH /attendance/clock-out`, `POST /attendance` (ADMIN/HR/MANAGER, direct upsert) | Clock-in resolves the caller's own `Employee` row via their `userId`; one record per employee per day (`@@unique([employeeId, date])`); "today" and the late cutoff are computed in the tenant's own timezone, not the server's |
+| `leave` | `GET /leave`, `GET /leave/balance/:employeeId`, `POST /leave`, `PATCH /leave/:id/approve` (ADMIN/HR/MANAGER), `PATCH /leave/:id/reject` (ADMIN/HR/MANAGER) | Approving an `ANNUAL` or `SICK` request increments the matching `LeaveBalance` field; re-deciding an already-decided request is a 400; a manager can only decide their own reports' requests and never their own |
+| `tenant` | `GET /tenant/settings`, `PATCH /tenant/settings` (ADMIN) | Timezone and attendance late-cutoff, per tenant |
 
 All verified end-to-end against the running API (not just unit-level) —
 register → login → CRUD → tenant isolation (a second tenant genuinely can't
@@ -61,11 +62,13 @@ changelog for the specific test transcript.
 
 ## Data model
 
-See `api/prisma/schema.prisma` for the source of truth. Six models:
-`Tenant`, `User` (login identity), `Employee` (HR profile — a `User` and an
-`Employee` are separate concerns; a `User` optionally links to one
-`Employee` via `userId`), `AttendanceRecord`, `LeaveRequest`,
-`LeaveBalance`.
+See `api/prisma/schema.prisma` for the source of truth. Core models:
+`Tenant` (now also holding `timezone`/`lateCutoffMinutes`), `User` (login
+identity), `Employee` (HR profile — a `User` and an `Employee` are separate
+concerns; a `User` optionally links to one `Employee` via `userId`),
+`AttendanceRecord`, `LeaveRequest`, `LeaveBalance`, plus `RefreshToken` and
+`PasswordSetToken` added for session/invite/reset handling (see
+[07-production-hardening.md](./07-production-hardening.md)).
 
 ## Gotchas hit during setup
 
@@ -124,21 +127,20 @@ in `auth.module.ts`, then export both `PassportModule` and `JwtModule` from
 
 ## What's not done yet
 
-- **No employee-invite flow.** `POST /auth/register` always creates a new
-  tenant + ADMIN user. There's no way yet for an admin to create a login
-  (`User`) for an existing `Employee` with a lower role — right now you can
-  create `Employee` records via the API, but only the original registrant
-  can log in. Needed before RBAC (MANAGER/EMPLOYEE roles) can be
-  meaningfully tested beyond ADMIN.
-- **Postgres RLS not implemented.** Tenant isolation is enforced entirely
-  in the application layer (every query includes `tenantId`). This was the
-  original plan's stated intent (see
-  [02-frontend-architecture.md](./02-frontend-architecture.md#planned-backend-shape))
-  but wasn't built — a missed `tenantId` filter in a future query would
-  leak cross-tenant data with no DB-level backstop.
+Superseded by [07-production-hardening.md](./07-production-hardening.md),
+which covers everything below except the frontend gap:
+
+- ~~No employee-invite flow~~ — fixed, see
+  [07-production-hardening.md](./07-production-hardening.md#phase-1--security-and-correctness).
+  `POST /employees/:id/invite` (ADMIN/HR) creates a login for an existing
+  `Employee`.
+- **Postgres RLS not implemented yet** (in progress) — tenant isolation is
+  still enforced entirely in the application layer. See
+  [07-production-hardening.md](./07-production-hardening.md#not-yet-done).
 - **Frontend still runs entirely on mock data.** `web/` has not been wired
   to call this API yet — that's the natural next step (auth pages, token
   storage, replacing `src/lib/mock-data.ts` reads with fetches).
-- **No automated tests written** for the new modules (the vitest scaffold
-  is there; only the default `app.controller.spec.ts` was touched, to match
-  the health-check rename).
+- ~~No automated tests~~ — fixed. A real e2e suite now runs against
+  Postgres in CI (tenant isolation, role visibility, cookie/refresh/logout,
+  invite/reset, timezone boundaries) plus unit tests for the timezone math;
+  see [07-production-hardening.md](./07-production-hardening.md).
