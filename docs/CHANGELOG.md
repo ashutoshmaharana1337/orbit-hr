@@ -2,6 +2,55 @@
 
 Chronological log of work done on Orbit HR so far. Newest first.
 
+## Session 7 — Production hardening (in progress)
+
+Triggered by a full tech-lead-style review
+(`docs/production-readiness-review.html`), verdict "Not yet" — two critical
+vulnerabilities, no version control, four screens still on mock data.
+Working through the review's phased roadmap; this session covers phases 0
+(foundations) and 1 (security/correctness). Full detail in
+[07-production-hardening.md](./07-production-hardening.md); summary here.
+
+**Foundations**: `git init`, pushed to a private GitHub repo, a GitHub
+Actions CI pipeline (lint/typecheck/unit/e2e-against-real-Postgres/build
+for both apps), Node pinned to 22 LTS. Hit and fixed two real CI-only
+failures along the way: a false `npm ci` lockfile-sync error from an npm
+version mismatch between local and the CI runner, and a missing Prisma
+client on fresh install because `ignore-scripts=true` (needed for this
+machine's locked-down npm policy) also silently disables Prisma's
+postinstall generator everywhere, not just here.
+
+**Fixed, each proven with a real two-tenant e2e test, not just read and
+believed**:
+- Critical: attendance upsert and employee create/update accepted an
+  `employeeId`/`managerId` from the request body with no tenant check —
+  a cross-tenant write.
+- High: `GET /employees`, `GET /leave`, `GET /leave/balance/:id` ignored
+  role entirely past the auth guard — any `EMPLOYEE` could read the whole
+  company's phone numbers and leave reasons.
+- High: leave approval let a `MANAGER` approve anyone including
+  themselves, as two non-atomic writes, with no balance check.
+
+**Shipped as four further PRs**:
+- Session moved from a `localStorage` JWT to httpOnly cookies with
+  rotating, hashed refresh tokens (replay of a rotated-out token revokes
+  every session for that user).
+- Rate limiting (`@nestjs/throttler`) and `helmet` security headers.
+- An invite flow (`POST /employees/:id/invite`) and password reset,
+  sharing one token table and one consumption endpoint; a `MailService`
+  that logs the email (link included) when no provider is configured, so
+  the whole flow is testable without a real email account.
+- Attendance now computes "today" and the late-cutoff in the tenant's own
+  timezone (configurable per tenant) instead of the server's — verified
+  with unit tests pinning exact library behavior and e2e tests using fake
+  system time to prove the midnight-boundary case.
+
+**Still open**: Postgres row-level security (in progress — a request-
+scoped Prisma provider, not the lighter client-extension approach, to
+avoid a per-query transaction tax), branch protection on `master`, and
+phases 2–6 of the review (the frontend is still on mock data — see
+[06-auth.md](./06-auth.md#known-seams-by-design-not-bugs)).
+
 ## Session 6 — Real login + department landing pages (multi-agent)
 
 Requested: a real login page anyone can use, and a separate landing page
