@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Tenant" ADD COLUMN     "lateCutoffMinutes" INTEGER NOT NULL DEFAULT 600,
+ADD COLUMN     "timezone" TEXT NOT NULL DEFAULT 'UTC';

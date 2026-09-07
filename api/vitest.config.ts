@@ -9,5 +9,7 @@ export default defineConfig({
     globals: true,
     root: './',
     include: ['**/*.spec.ts'],
+    // Tenant-timezone math relies on the process's own timezone being UTC.
+    env: { TZ: 'UTC' },
   },
 });

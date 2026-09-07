@@ -46,10 +46,12 @@ enum PasswordTokenPurpose {
 }
 
 model Tenant {
-  id        String   @id @default(uuid())
-  name      String
-  slug      String   @unique
-  createdAt DateTime @default(now())
+  id                String   @id @default(uuid())
+  name              String
+  slug              String   @unique
+  timezone          String   @default("UTC")
+  lateCutoffMinutes Int      @default(600) // minutes since local midnight, e.g. 600 = 10:00
+  createdAt         DateTime @default(now())
 
   users            User[]
   employees        Employee[]
