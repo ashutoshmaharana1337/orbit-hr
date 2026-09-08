@@ -27,8 +27,11 @@ files on a OneDrive-synced desktop. Fixed:
 - Removed leftover `prisma-composer` skill folders and the stray
   `tsconfig.build.tsbuildinfo`; fixed the e2e spec that still asserted the
   old `Hello World!` route instead of `/api/health`.
-- **Not done**: branch protection on `master` (paused — needs an explicit
-  decision on required-check names before enabling `enforce_admins`).
+- Branch protection on `master`: requires the `api` and `web` CI jobs to
+  pass (strict — branch must be up to date with `master` before merge), 1
+  approving PR review (stale reviews dismissed on new pushes), no
+  force-pushes, no branch deletion, `enforce_admins` on (applies to repo
+  admins too, not just other contributors).
 
 ### Two CI landmines, for when this project's dependencies next get bumped
 
@@ -203,7 +206,6 @@ database, confirming the backstop didn't just move the bug, it closed it.
 
 ### Not yet done
 
-- Branch protection on `master`.
 - Everything in phases 2–6 of the review: wiring `web/` off mock data,
   `Department`/`LeavePolicy`/`AuditLog` tables, a Playwright smoke suite,
   Docker/staging/production infra, and observability (Sentry, structured
