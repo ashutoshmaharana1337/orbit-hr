@@ -7,8 +7,9 @@ import { PersonAvatar } from "@/components/person-avatar"
 import { StatusIndicator } from "@/components/status-indicator"
 import { buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { departments, employees, initials } from "@/lib/mock-data"
+import { departments, employees } from "@/lib/mock-data"
 import { departmentColor } from "@/lib/colors"
+import { initials } from "@/lib/utils"
 import { employeeStatusMeta } from "@/lib/status"
 
 export function generateStaticParams() {

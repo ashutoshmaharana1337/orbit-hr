@@ -2,6 +2,35 @@
 
 Chronological log of work done on Orbit HR so far. Newest first.
 
+## Session 8 — Phase 2: Employees screen on live data
+
+Started phase 2 of the review's roadmap (wiring `web/` off mock data).
+Landed the shared foundations — TanStack Query, a hand-mirrored
+`lib/api/types.ts` (no shared-types package between `api/` and `web/` yet;
+not worth setting one up for one screen) — plus the first screen, in the
+review's recommended order: Employees.
+
+List, detail, create, and edit all now hit the real API. The detail page
+(`employees/[id]/page.tsx`) was a statically-generated Server Component
+against the mock employee array; converted to a Client Component
+(`useParams` + TanStack Query) since real employee data is tenant-scoped
+and cookie-gated, and this app has no server-side cookie-forwarding
+plumbing to fetch it from a Server Component. Its Attendance/Leave-history
+tabs are now honest "not wired yet" placeholders instead of continuing to
+show fabricated mock records against a real employee's identity.
+
+Verified with `lint`/`typecheck`/production `build`, a `curl` pass
+comparing every employees endpoint's response against the frontend's types
+field-for-field, and a full Playwright browser pass (create → list →
+detail → edit → detail, zero unexpected console errors) — this dev
+machine has no network access to fetch Playwright's own browser, so it
+drove the system-installed Chrome directly instead.
+
+**Still open**: Attendance, Leave, Dashboard screens (still mock data), the
+two dashboard aggregate endpoints, the department landing page, and
+deleting `mock-data.ts` — see
+[08-frontend-live-data.md](./08-frontend-live-data.md#not-yet-done).
+
 ## Session 7 — Production hardening
 
 Triggered by a full tech-lead-style review

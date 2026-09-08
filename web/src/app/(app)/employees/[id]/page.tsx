@@ -1,39 +1,71 @@
-import { notFound } from "next/navigation"
-import { Briefcase, Calendar, Mail, MapPin, Phone } from "lucide-react"
+"use client"
+
+import Link from "next/link"
+import { useParams } from "next/navigation"
+import { Briefcase, Calendar, Mail, MapPin, Pencil, Phone } from "lucide-react"
 
 import { SiteHeader } from "@/components/layout/site-header"
 import { PersonAvatar } from "@/components/person-avatar"
 import { StatusIndicator } from "@/components/status-indicator"
 import { Tag } from "@/components/tag"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  employees,
-  getEmployee,
-  getLeaveBalance,
-  initials,
-  leaveRequests,
-  todayAttendance,
-} from "@/lib/mock-data"
-import { departmentColor, leaveTypeColor } from "@/lib/colors"
-import { attendanceStatusMeta, employeeStatusMeta, leaveStatusMeta } from "@/lib/status"
+import { departmentColor } from "@/lib/colors"
+import { apiEmployeeStatusMeta } from "@/lib/status"
+import { initials } from "@/lib/utils"
+import { useAuth } from "@/lib/auth-context"
+import { useEmployee } from "@/hooks/use-employees"
+import { ApiError } from "@/lib/api-client"
+import { EmployeeFormDialog } from "../employee-form-dialog"
 
-export function generateStaticParams() {
-  return employees.map((e) => ({ id: e.id }))
-}
+export default function EmployeeProfilePage() {
+  const { id } = useParams<{ id: string }>()
+  const { user } = useAuth()
+  const { data: employee, isLoading, error } = useEmployee(id)
 
-export default async function EmployeeProfilePage(props: PageProps<"/employees/[id]">) {
-  const { id } = await props.params
-  const employee = getEmployee(id)
-  if (!employee) notFound()
+  const canManageEmployees = user?.role === "ADMIN" || user?.role === "HR"
 
-  const statusMeta = employeeStatusMeta[employee.status]
-  const balance = getLeaveBalance(employee.id)
-  const attendance = todayAttendance.find((a) => a.employeeId === employee.id)
-  const employeeLeaveHistory = leaveRequests.filter((r) => r.employeeId === employee.id)
-  const reports = employees.filter((e) => e.manager === employee.name)
+  if (isLoading) {
+    return (
+      <div className="flex flex-1 flex-col">
+        <SiteHeader title="Employees" />
+        <div className="flex flex-1 items-center justify-center p-6 text-sm text-muted-foreground">
+          Loading…
+        </div>
+      </div>
+    )
+  }
+
+  if (error instanceof ApiError && error.status === 404) {
+    return (
+      <div className="flex flex-1 flex-col">
+        <SiteHeader title="Employees" />
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
+          <p>Employee not found.</p>
+          <Link href="/employees" className="text-primary hover:underline">
+            Back to directory
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  if (!employee) {
+    return (
+      <div className="flex flex-1 flex-col">
+        <SiteHeader title="Employees" />
+        <div className="flex flex-1 items-center justify-center p-6 text-sm text-destructive">
+          {error instanceof Error ? error.message : "Failed to load this employee."}
+        </div>
+      </div>
+    )
+  }
+
+  const statusMeta = apiEmployeeStatusMeta[employee.status]
+  const canEdit = canManageEmployees
 
   return (
     <div className="flex flex-1 flex-col">
@@ -56,22 +88,47 @@ export default async function EmployeeProfilePage(props: PageProps<"/employees/[
                 <StatusIndicator color={statusMeta.color} label={statusMeta.label} className="mt-1" />
               </div>
             </div>
-            <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2 sm:text-right">
-              <div className="flex items-center gap-2 text-muted-foreground sm:justify-end">
-                <Mail className="size-3.5" />
-                {employee.email}
-              </div>
-              <div className="flex items-center gap-2 text-muted-foreground sm:justify-end">
-                <Phone className="size-3.5" />
-                {employee.phone}
-              </div>
-              <div className="flex items-center gap-2 text-muted-foreground sm:justify-end">
-                <MapPin className="size-3.5" />
-                {employee.location}
-              </div>
-              <div className="flex items-center gap-2 text-muted-foreground sm:justify-end">
-                <Calendar className="size-3.5" />
-                Joined {new Date(employee.joinDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+            <div className="flex flex-col items-end gap-3">
+              {canEdit && (
+                <EmployeeFormDialog
+                  mode="edit"
+                  employee={employee}
+                  triggerRender={<Button variant="outline" size="sm" />}
+                >
+                  <Pencil />
+                  Edit
+                </EmployeeFormDialog>
+              )}
+              <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2 sm:text-right">
+                {employee.email && (
+                  <div className="flex items-center gap-2 text-muted-foreground sm:justify-end">
+                    <Mail className="size-3.5" />
+                    {employee.email}
+                  </div>
+                )}
+                {employee.phone && (
+                  <div className="flex items-center gap-2 text-muted-foreground sm:justify-end">
+                    <Phone className="size-3.5" />
+                    {employee.phone}
+                  </div>
+                )}
+                {employee.location && (
+                  <div className="flex items-center gap-2 text-muted-foreground sm:justify-end">
+                    <MapPin className="size-3.5" />
+                    {employee.location}
+                  </div>
+                )}
+                {employee.joinDate && (
+                  <div className="flex items-center gap-2 text-muted-foreground sm:justify-end">
+                    <Calendar className="size-3.5" />
+                    Joined{" "}
+                    {new Date(employee.joinDate).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           </CardContent>
@@ -92,7 +149,7 @@ export default async function EmployeeProfilePage(props: PageProps<"/employees/[
               <CardContent className="flex flex-col gap-3 text-sm">
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Manager</span>
-                  <span>{employee.manager ?? "—"}</span>
+                  <span>{employee.manager?.name ?? "—"}</span>
                 </div>
                 <Separator />
                 <div className="flex items-center justify-between">
@@ -107,117 +164,92 @@ export default async function EmployeeProfilePage(props: PageProps<"/employees/[
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Leave balance</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4">
-                {balance && (
-                  <>
-                    <div className="flex flex-col gap-1.5">
-                      <div className="flex items-center justify-between text-sm">
-                        <span>Annual leave</span>
-                        <span className="text-muted-foreground">
-                          {balance.annual.used} / {balance.annual.total} days
-                        </span>
+            {employee.leaveBalance !== undefined && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Leave balance</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-4">
+                  {employee.leaveBalance && (
+                    <>
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between text-sm">
+                          <span>Annual leave</span>
+                          <span className="text-muted-foreground">
+                            {employee.leaveBalance.annualUsed} / {employee.leaveBalance.annualTotal} days
+                          </span>
+                        </div>
+                        <Progress
+                          value={(employee.leaveBalance.annualUsed / employee.leaveBalance.annualTotal) * 100}
+                        />
                       </div>
-                      <Progress value={(balance.annual.used / balance.annual.total) * 100} />
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <div className="flex items-center justify-between text-sm">
-                        <span>Sick leave</span>
-                        <span className="text-muted-foreground">
-                          {balance.sick.used} / {balance.sick.total} days
-                        </span>
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between text-sm">
+                          <span>Sick leave</span>
+                          <span className="text-muted-foreground">
+                            {employee.leaveBalance.sickUsed} / {employee.leaveBalance.sickTotal} days
+                          </span>
+                        </div>
+                        <Progress
+                          value={(employee.leaveBalance.sickUsed / employee.leaveBalance.sickTotal) * 100}
+                        />
                       </div>
-                      <Progress value={(balance.sick.used / balance.sick.total) * 100} />
-                    </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-1.5 text-base">
-                  <Briefcase className="size-3.5" />
-                  Direct reports ({reports.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3">
-                {reports.length === 0 && (
-                  <p className="text-sm text-muted-foreground">No direct reports.</p>
-                )}
-                {reports.map((r) => (
-                  <div key={r.id} className="flex items-center gap-2.5 text-sm">
-                    <PersonAvatar
-                      name={r.name}
-                      initials={initials(r.name)}
-                      className="size-6"
-                      fallbackClassName="text-[10px]"
-                    />
-                    <div className="flex flex-col">
-                      <span className="font-medium leading-tight">{r.name}</span>
-                      <span className="text-xs text-muted-foreground leading-tight">{r.title}</span>
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
+            {employee.reports !== undefined && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-1.5 text-base">
+                    <Briefcase className="size-3.5" />
+                    Direct reports ({employee.reports.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-3">
+                  {employee.reports.length === 0 && (
+                    <p className="text-sm text-muted-foreground">No direct reports.</p>
+                  )}
+                  {employee.reports.map((r) => (
+                    <Link
+                      key={r.id}
+                      href={`/employees/${r.id}`}
+                      className="flex items-center gap-2.5 text-sm hover:underline"
+                    >
+                      <PersonAvatar
+                        name={r.name}
+                        initials={initials(r.name)}
+                        className="size-6"
+                        fallbackClassName="text-[10px]"
+                      />
+                      <div className="flex flex-col">
+                        <span className="font-medium leading-tight">{r.name}</span>
+                        <span className="text-xs text-muted-foreground leading-tight">{r.title}</span>
+                      </div>
+                    </Link>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="attendance">
             <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Today</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {attendance ? (
-                  <div className="flex flex-wrap items-center gap-6 text-sm">
-                    <StatusIndicator
-                      color={attendanceStatusMeta[attendance.status].color}
-                      label={attendanceStatusMeta[attendance.status].label}
-                    />
-                    <div className="text-muted-foreground">
-                      Clock in: <span className="text-foreground">{attendance.clockIn ?? "—"}</span>
-                    </div>
-                    <div className="text-muted-foreground">
-                      Clock out: <span className="text-foreground">{attendance.clockOut ?? "—"}</span>
-                    </div>
-                    <div className="text-muted-foreground">
-                      Hours logged: <span className="text-foreground">{attendance.hours}</span>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No attendance record for today.</p>
-                )}
+              <CardContent className="p-6 text-sm text-muted-foreground">
+                Per-employee attendance history isn&apos;t wired to the real API yet — it&apos;s
+                next in the phase 2 rollout. See the Attendance screen for today&apos;s
+                tenant-wide view.
               </CardContent>
             </Card>
           </TabsContent>
 
           <TabsContent value="leave">
             <Card>
-              <CardContent className="flex flex-col p-0">
-                {employeeLeaveHistory.length === 0 && (
-                  <p className="p-6 text-sm text-muted-foreground">No leave requests on file.</p>
-                )}
-                {employeeLeaveHistory.map((req, i) => (
-                  <div key={req.id}>
-                    <div className="flex items-center justify-between p-4 text-sm">
-                      <div className="flex flex-col gap-1">
-                        <Tag color={leaveTypeColor(req.type)}>{req.type}</Tag>
-                        <span className="text-xs text-muted-foreground">
-                          {req.startDate} → {req.endDate} · {req.days} day{req.days > 1 ? "s" : ""}
-                        </span>
-                      </div>
-                      <StatusIndicator
-                        color={leaveStatusMeta[req.status].color}
-                        label={leaveStatusMeta[req.status].label}
-                      />
-                    </div>
-                    {i < employeeLeaveHistory.length - 1 && <Separator />}
-                  </div>
-                ))}
+              <CardContent className="p-6 text-sm text-muted-foreground">
+                Per-employee leave history isn&apos;t wired to the real API yet — it&apos;s next
+                in the phase 2 rollout. See the Leave screen for tenant-wide requests.
               </CardContent>
             </Card>
           </TabsContent>

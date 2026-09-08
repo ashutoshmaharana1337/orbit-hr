@@ -35,7 +35,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { getEmployee, initials, leaveRequests as initialRequests, type LeaveRequest, type LeaveStatus } from "@/lib/mock-data"
+import { getEmployee, leaveRequests as initialRequests, type LeaveRequest, type LeaveStatus } from "@/lib/mock-data"
+import { initials } from "@/lib/utils"
 import { leaveTypeColor } from "@/lib/colors"
 import { leaveStatusMeta } from "@/lib/status"
 

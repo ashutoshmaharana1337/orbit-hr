@@ -44,15 +44,6 @@ export function getEmployee(id: string) {
   return employees.find((e) => e.id === id)
 }
 
-export function initials(name: string) {
-  return name
-    .split(" ")
-    .map((p) => p[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase()
-}
-
 export type AttendanceStatus = "present" | "late" | "wfh" | "absent"
 
 export type AttendanceRecord = {

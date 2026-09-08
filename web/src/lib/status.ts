@@ -13,6 +13,14 @@ export const employeeStatusMeta = {
   inactive: { color: statusColors.neutral, label: "Inactive" },
 } as const
 
+// Same as employeeStatusMeta, keyed by the real API's UPPERCASE enum
+// (EmployeeStatus in lib/api/types.ts) instead of mock-data's lowercase one.
+export const apiEmployeeStatusMeta = {
+  ACTIVE: { color: statusColors.good, label: "Active" },
+  ON_LEAVE: { color: statusColors.warning, label: "On leave" },
+  INACTIVE: { color: statusColors.neutral, label: "Inactive" },
+} as const
+
 export const attendanceStatusMeta = {
   present: { color: statusColors.good, label: "Present" },
   late: { color: statusColors.warning, label: "Late" },

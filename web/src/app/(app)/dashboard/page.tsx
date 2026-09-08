@@ -13,11 +13,11 @@ import {
   employees,
   getEmployee,
   headcountByDepartment,
-  initials,
   leaveRequests,
   recentActivity,
 } from "@/lib/mock-data"
 import { statusColors } from "@/lib/status"
+import { initials } from "@/lib/utils"
 import { AttendanceTrendChart } from "./attendance-trend-chart"
 import { DepartmentChart } from "./department-chart"
 

@@ -10,16 +10,18 @@ built so far. Read them in order, or jump to what you need:
 5. [05-backend.md](./05-backend.md) — the NestJS/Postgres/Prisma API: architecture, modules, auth, and a Prisma CLI landmine worth reading before you touch it
 6. [06-auth.md](./06-auth.md) — real login wired to the backend, department landing pages, and which parts of the app still run on mock data vs. the real API
 7. [07-production-hardening.md](./07-production-hardening.md) — the production-readiness review's findings and the security/session/timezone work done against it (git+CI, tenant-isolation fixes, httpOnly cookies, rate limiting, invite/reset, tenant timezones)
-8. [CHANGELOG.md](./CHANGELOG.md) — chronological log of every change, session by session
+8. [08-frontend-live-data.md](./08-frontend-live-data.md) — phase 2: replacing mock data with the real API, screen by screen (TanStack Query, the Employees screen so far)
+9. [CHANGELOG.md](./CHANGELOG.md) — chronological log of every change, session by session
 
 ## Current state
 
 - **Frontend**: `web/` — Next.js 16 app with 4 working screens (Dashboard,
   Employees, Attendance, Leave) plus real **login** and **department
-  landing pages** now wired to the live backend. The screens themselves
-  still read from mock in-memory data (`src/lib/mock-data.ts`) — auth is
-  the first (and so far only) part of `web/` talking to the real API. See
-  [06-auth.md](./06-auth.md).
+  landing pages** now wired to the live backend. The **Employees** screen
+  (list, detail, create, edit) is now wired to the real API too, via
+  TanStack Query — see [08-frontend-live-data.md](./08-frontend-live-data.md).
+  Attendance, Leave, and Dashboard still read from mock in-memory data
+  (`src/lib/mock-data.ts`).
 - **Backend**: `api/` — NestJS 12 + PostgreSQL + Prisma, tenant isolation
   enforced at **both** the application layer (every query scoped by
   `tenantId`) and the database layer (Postgres row-level security via a
@@ -37,10 +39,10 @@ built so far. Read them in order, or jump to what you need:
   has a real git history and CI pipeline
   ([07-production-hardening.md](./07-production-hardening.md)) instead of
   living only on a synced desktop.
-- **Not yet done**: connecting the Employees/Attendance/Leave *screens* to
-  the real API (they're still mock data even though login is real), and
-  branch protection on `master`. Full lists in
-  [07-production-hardening.md](./07-production-hardening.md#not-yet-done)
+- **Not yet done**: connecting the Attendance/Leave/Dashboard *screens* to
+  the real API. Full lists in
+  [08-frontend-live-data.md](./08-frontend-live-data.md#not-yet-done),
+  [07-production-hardening.md](./07-production-hardening.md#not-yet-done),
   and [06-auth.md](./06-auth.md#known-seams-by-design-not-bugs).
 
 ## Stack decisions made so far

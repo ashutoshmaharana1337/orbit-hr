@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/sidebar"
 import { PersonAvatar } from "@/components/person-avatar"
 import { useAuth } from "@/lib/auth-context"
-import { initials } from "@/lib/mock-data"
+import { initials } from "@/lib/utils"
 
 const mainNav = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },

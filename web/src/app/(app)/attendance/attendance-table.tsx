@@ -14,7 +14,8 @@ import {
 } from "@/components/ui/table"
 import { PersonAvatar } from "@/components/person-avatar"
 import { StatusIndicator } from "@/components/status-indicator"
-import { getEmployee, initials, todayAttendance } from "@/lib/mock-data"
+import { getEmployee, todayAttendance } from "@/lib/mock-data"
+import { initials } from "@/lib/utils"
 import { attendanceStatusMeta } from "@/lib/status"
 
 export function AttendanceTable() {

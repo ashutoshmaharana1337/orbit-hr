@@ -24,23 +24,26 @@ import {
 import { PersonAvatar } from "@/components/person-avatar"
 import { StatusIndicator } from "@/components/status-indicator"
 import { Tag } from "@/components/tag"
-import { departments, employees, initials } from "@/lib/mock-data"
+import { departments } from "@/lib/mock-data"
 import { departmentColor } from "@/lib/colors"
-import { employeeStatusMeta } from "@/lib/status"
+import { apiEmployeeStatusMeta } from "@/lib/status"
+import { initials } from "@/lib/utils"
+import { useAuth } from "@/lib/auth-context"
+import { useEmployees } from "@/hooks/use-employees"
+import { EmployeeFormDialog } from "./employee-form-dialog"
 
 export function EmployeeDirectory() {
   const [query, setQuery] = useState("")
   const [department, setDepartment] = useState<string>("all")
+  const role = useAuth().user?.role
+  const canManageEmployees = role === "ADMIN" || role === "HR"
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return employees.filter((e) => {
-      const matchesQuery =
-        !q || e.name.toLowerCase().includes(q) || e.title.toLowerCase().includes(q) || e.email.toLowerCase().includes(q)
-      const matchesDept = department === "all" || e.department === department
-      return matchesQuery && matchesDept
-    })
-  }, [query, department])
+  const { data: employees, isLoading, isError, error } = useEmployees({
+    search: query.trim() || undefined,
+    department: department === "all" ? undefined : department,
+  })
+
+  const filtered = useMemo(() => employees ?? [], [employees])
 
   return (
     <div className="flex flex-1 flex-col gap-4">
@@ -70,12 +73,14 @@ export function EmployeeDirectory() {
           </SelectContent>
         </Select>
         <span className="text-sm text-muted-foreground">
-          {filtered.length} of {employees.length} employees
+          {isLoading ? "Loading…" : `${filtered.length} employee${filtered.length === 1 ? "" : "s"}`}
         </span>
-        <Button size="sm" className="ml-auto">
-          <UserPlus />
-          Add employee
-        </Button>
+        {canManageEmployees && (
+          <EmployeeFormDialog mode="create" triggerRender={<Button size="sm" className="ml-auto" />}>
+            <UserPlus />
+            Add employee
+          </EmployeeFormDialog>
+        )}
       </div>
 
       <div className="overflow-hidden rounded-lg border">
@@ -90,36 +95,44 @@ export function EmployeeDirectory() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.map((employee) => {
-              const meta = employeeStatusMeta[employee.status]
-              return (
-                <TableRow key={employee.id} className="cursor-pointer">
-                  <TableCell>
-                    <Link href={`/employees/${employee.id}`} className="flex items-center gap-3">
-                      <PersonAvatar
-                        name={employee.name}
-                        initials={initials(employee.name)}
-                        className="size-8"
-                        fallbackClassName="text-xs"
-                      />
-                      <div className="flex flex-col">
-                        <span className="font-medium">{employee.name}</span>
-                        <span className="text-xs text-muted-foreground">{employee.title}</span>
-                      </div>
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <Tag color={departmentColor(employee.department)}>{employee.department}</Tag>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{employee.location}</TableCell>
-                  <TableCell className="text-muted-foreground">{employee.manager ?? "—"}</TableCell>
-                  <TableCell>
-                    <StatusIndicator color={meta.color} label={meta.label} />
-                  </TableCell>
-                </TableRow>
-              )
-            })}
-            {filtered.length === 0 && (
+            {isError && (
+              <TableRow>
+                <TableCell colSpan={5} className="py-8 text-center text-sm text-destructive">
+                  {error instanceof Error ? error.message : "Failed to load employees."}
+                </TableCell>
+              </TableRow>
+            )}
+            {!isError &&
+              filtered.map((employee) => {
+                const meta = apiEmployeeStatusMeta[employee.status]
+                return (
+                  <TableRow key={employee.id} className="cursor-pointer">
+                    <TableCell>
+                      <Link href={`/employees/${employee.id}`} className="flex items-center gap-3">
+                        <PersonAvatar
+                          name={employee.name}
+                          initials={initials(employee.name)}
+                          className="size-8"
+                          fallbackClassName="text-xs"
+                        />
+                        <div className="flex flex-col">
+                          <span className="font-medium">{employee.name}</span>
+                          <span className="text-xs text-muted-foreground">{employee.title}</span>
+                        </div>
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <Tag color={departmentColor(employee.department)}>{employee.department}</Tag>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{employee.location ?? "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">{employee.manager?.name ?? "—"}</TableCell>
+                    <TableCell>
+                      <StatusIndicator color={meta.color} label={meta.label} />
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            {!isError && !isLoading && filtered.length === 0 && (
               <TableRow>
                 <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
                   No employees match your search.
