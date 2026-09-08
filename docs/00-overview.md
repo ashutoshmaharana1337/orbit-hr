@@ -38,8 +38,9 @@ built so far. Read them in order, or jump to what you need:
   ([07-production-hardening.md](./07-production-hardening.md)) instead of
   living only on a synced desktop.
 - **Not yet done**: connecting the Employees/Attendance/Leave *screens* to
-  the real API (they're still mock data even though login is real), and
-  branch protection on `master`. Full lists in
+  the real API (they're still mock data even though login is real).
+  Branch protection on `master` (required CI checks, 1 review, enforced
+  for admins) is now in place. Full lists in
   [07-production-hardening.md](./07-production-hardening.md#not-yet-done)
   and [06-auth.md](./06-auth.md#known-seams-by-design-not-bugs).
 

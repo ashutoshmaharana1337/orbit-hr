@@ -65,9 +65,12 @@ refresh-token-replay defense it was supposed to report. New
 unfiltered cross-tenant query, not just that application code remembers
 to filter.
 
-**Still open**: branch protection on `master`, and phases 2–6 of the
-review (the frontend is still on mock data — see
-[06-auth.md](./06-auth.md#known-seams-by-design-not-bugs)).
+**Also**: branch protection enabled on `master` — requires the `api` and
+`web` CI jobs to pass (strict, must be up to date), 1 approving PR review,
+no force-pushes or deletions, enforced for admins too.
+
+**Still open**: phases 2–6 of the review (the frontend is still on mock
+data — see [06-auth.md](./06-auth.md#known-seams-by-design-not-bugs)).
 
 ## Session 6 — Real login + department landing pages (multi-agent)
 
