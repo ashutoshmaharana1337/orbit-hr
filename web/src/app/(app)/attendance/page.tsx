@@ -1,26 +1,49 @@
+"use client"
+
 import { SiteHeader } from "@/components/layout/site-header"
 import { Card, CardContent } from "@/components/ui/card"
-import { todayAttendance } from "@/lib/mock-data"
-import { attendanceStatusMeta } from "@/lib/status"
+import { apiAttendanceStatusMeta } from "@/lib/status"
+import { useAttendanceSummary, useTodayAttendance } from "@/hooks/use-attendance"
+import { useEmployees } from "@/hooks/use-employees"
 import { AttendanceTable } from "./attendance-table"
+import { ClockCard } from "./clock-card"
 
-const summary = (["present", "late", "wfh", "absent"] as const).map((status) => ({
-  status,
-  meta: attendanceStatusMeta[status],
-  count: todayAttendance.filter((a) => a.status === status).length,
-}))
+const STATUSES = (["PRESENT", "LATE", "WFH", "ABSENT"] as const)
+
+const today = new Date().toLocaleDateString("en-US", {
+  weekday: "long",
+  month: "short",
+  day: "numeric",
+})
 
 export default function AttendancePage() {
+  const { data: summaryData } = useAttendanceSummary()
+  const { data: todayAttendance } = useTodayAttendance()
+  const { data: employees } = useEmployees()
+
+  const summary = STATUSES.map((status) => ({
+    status,
+    meta: apiAttendanceStatusMeta[status],
+    count: summaryData?.find((s) => s.status === status)?.count ?? 0,
+  }))
+
+  const clockedIn = todayAttendance?.length ?? 0
+  const total = employees?.length
+
   return (
     <div className="flex flex-1 flex-col">
       <SiteHeader title="Attendance" />
       <div className="flex flex-1 flex-col gap-4 p-4 md:p-6">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight">Today · Sep 2, 2026</h2>
+          <h2 className="text-2xl font-semibold tracking-tight">Today · {today}</h2>
           <p className="text-sm text-muted-foreground">
-            Live clock-in status for all {todayAttendance.length} employees.
+            {total !== undefined
+              ? `${clockedIn} of ${total} employees have clocked in today.`
+              : `${clockedIn} employees have clocked in today.`}
           </p>
         </div>
+
+        <ClockCard />
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {summary.map((s) => (

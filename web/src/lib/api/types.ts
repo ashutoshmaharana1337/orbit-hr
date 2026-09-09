@@ -56,3 +56,23 @@ export type ListEmployeesParams = {
   department?: string
   status?: EmployeeStatus
 }
+
+export type AttendanceStatus = "PRESENT" | "LATE" | "WFH" | "ABSENT"
+
+// What GET /attendance/today returns per row — always tenant-wide, not
+// role-filtered (see api/src/attendance/attendance.controller.ts).
+export type AttendanceRecord = {
+  id: string
+  employeeId: string
+  date: string
+  status: AttendanceStatus
+  clockIn: string | null
+  clockOut: string | null
+  hours: number
+  employee: { id: string; name: string; department: string }
+}
+
+export type AttendanceSummaryEntry = {
+  status: AttendanceStatus
+  count: number
+}

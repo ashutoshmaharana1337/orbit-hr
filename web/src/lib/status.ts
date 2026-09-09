@@ -28,6 +28,15 @@ export const attendanceStatusMeta = {
   absent: { color: statusColors.critical, label: "Absent" },
 } as const
 
+// Same as attendanceStatusMeta, keyed by the real API's UPPERCASE enum
+// (AttendanceStatus in lib/api/types.ts) instead of mock-data's lowercase one.
+export const apiAttendanceStatusMeta = {
+  PRESENT: { color: statusColors.good, label: "Present" },
+  LATE: { color: statusColors.warning, label: "Late" },
+  WFH: { color: statusColors.info, label: "Work from home" },
+  ABSENT: { color: statusColors.critical, label: "Absent" },
+} as const
+
 export const leaveStatusMeta = {
   pending: { color: statusColors.warning, label: "Pending" },
   approved: { color: statusColors.good, label: "Approved" },
