@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { businessDateUTC } from '../src/attendance/business-time.js';
 
 // Seeding is a system-level bootstrap, not simulated user traffic — it
 // needs to write rows for a tenant it creates itself, across every table,
@@ -121,9 +122,11 @@ async function main() {
     await prisma.employee.update({ where: { id: employeeId }, data: { userId: user.id } });
   }
 
-  // Today's attendance for everyone but the on-leave/inactive folks
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // Today's attendance for everyone but the on-leave/inactive folks.
+  // Must match businessDateUTC(tenant.timezone) — the app's own notion of
+  // "today" — not local machine midnight, or seeded rows land on the
+  // wrong calendar date and /attendance/today comes back empty.
+  const today = businessDateUTC(tenant.timezone);
   const statuses: Array<'PRESENT' | 'LATE' | 'WFH'> = ['PRESENT', 'PRESENT', 'WFH', 'PRESENT', 'LATE'];
   let i = 0;
   for (const e of employees) {
