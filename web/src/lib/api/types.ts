@@ -76,3 +76,62 @@ export type AttendanceSummaryEntry = {
   status: AttendanceStatus
   count: number
 }
+
+export type AttendanceTrendEntry = {
+  day: string
+  present: number
+  onLeave: number
+}
+
+export type LeaveStatus = "PENDING" | "APPROVED" | "REJECTED"
+export type LeaveType = "ANNUAL" | "SICK" | "WORK_FROM_HOME" | "UNPAID"
+
+// What POST /leave, PATCH /leave/:id/approve, and PATCH /leave/:id/reject
+// return — no `employee` include on those responses.
+export type LeaveRequestRecord = {
+  id: string
+  employeeId: string
+  type: LeaveType
+  startDate: string
+  endDate: string
+  days: number
+  status: LeaveStatus
+  reason: string
+  appliedOn: string
+  decidedAt: string | null
+  decidedBy: string | null
+}
+
+// What GET /leave returns per row — same fields, plus the joined employee.
+export type LeaveRequestListEntry = LeaveRequestRecord & {
+  employee: { id: string; name: string; department: string }
+}
+
+export type LeaveBalance = {
+  id: string
+  employeeId: string
+  annualUsed: number
+  annualTotal: number
+  sickUsed: number
+  sickTotal: number
+}
+
+export type CreateLeaveRequestInput = {
+  type: LeaveType
+  startDate: string
+  endDate: string
+  reason: string
+}
+
+export type ListLeaveParams = {
+  status?: LeaveStatus
+  employeeId?: string
+}
+
+export type DashboardStats = {
+  totalEmployees: number
+  onLeaveToday: number
+  pendingLeaveRequests: number
+  attendanceRate: number
+  headcountByDepartment: { department: string; count: number }[]
+}

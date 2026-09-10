@@ -8,10 +8,9 @@ management — built from scratch on Next.js and NestJS.
 ## What's here
 
 - **`web/`** — Next.js 16 frontend. Dashboard, Employees, Attendance, and
-  Leave screens, plus real login and per-department landing pages wired to
-  the live API. (The four main screens themselves still read from mock
-  data — see [docs/00-overview.md](docs/00-overview.md) for exactly what's
-  real vs. mock today.)
+  Leave screens, all wired to the live API. Real login, per-department landing
+  pages, and all four main screens fetch live data via TanStack Query. Mock
+  data completely removed — see [docs/08-frontend-live-data.md](docs/08-frontend-live-data.md).
 - **`api/`** — NestJS 12 + PostgreSQL + Prisma backend. Multi-tenant, with
   tenant isolation enforced at *both* the application layer (every query
   scoped by `tenantId`) and the database layer (Postgres row-level
@@ -92,9 +91,9 @@ Full detail, plus what's *not* done yet, in
 This started from a full tech-lead-style production-readiness review
 ([docs/production-readiness-review.html](docs/production-readiness-review.html))
 that scored the project "Not yet" and laid out a phased roadmap. Phases 0
-(foundations — git, CI) and 1 (security and correctness) are complete.
-Phase 2 onward (wiring the frontend off mock data, completing the data
-model, infra, observability) is still ahead. Current state in full detail:
+(foundations — git, CI), 1 (security and correctness), and 2 (frontend wired
+to real API) are complete. Phase 3 onward (completing the data model, infra,
+observability) is still ahead. Current state in full detail:
 [docs/00-overview.md](docs/00-overview.md).
 
 ## Documentation

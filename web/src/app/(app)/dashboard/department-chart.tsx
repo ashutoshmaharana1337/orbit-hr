@@ -8,7 +8,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart"
-import { headcountByDepartment } from "@/lib/mock-data"
+import { useDashboardStats } from "@/hooks/use-dashboard"
 
 const chartConfig = {
   count: {
@@ -18,10 +18,25 @@ const chartConfig = {
 } satisfies ChartConfig
 
 export function DepartmentChart() {
+  const { data: stats, isLoading, isError } = useDashboardStats()
+
+  if (isLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">Loading…</div>
+    )
+  }
+  if (isError || !stats) {
+    return (
+      <div className="flex h-64 items-center justify-center text-sm text-destructive">
+        Failed to load headcount.
+      </div>
+    )
+  }
+
   return (
     <ChartContainer config={chartConfig} className="h-64 w-full">
       <BarChart
-        data={headcountByDepartment}
+        data={stats.headcountByDepartment}
         layout="vertical"
         margin={{ left: -8, right: 16 }}
       >

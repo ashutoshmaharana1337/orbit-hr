@@ -4,12 +4,14 @@ import {
   clockIn,
   clockOut,
   getAttendanceSummary,
+  getAttendanceTrend,
   listTodayAttendance,
 } from "@/lib/api/attendance"
 
 const attendanceKeys = {
   today: ["attendance", "today"] as const,
   summary: ["attendance", "summary"] as const,
+  trend: (days: number) => ["attendance", "trend", days] as const,
 }
 
 export function useTodayAttendance() {
@@ -23,6 +25,13 @@ export function useAttendanceSummary() {
   return useQuery({
     queryKey: attendanceKeys.summary,
     queryFn: getAttendanceSummary,
+  })
+}
+
+export function useAttendanceTrend(days = 7) {
+  return useQuery({
+    queryKey: attendanceKeys.trend(days),
+    queryFn: () => getAttendanceTrend(days),
   })
 }
 

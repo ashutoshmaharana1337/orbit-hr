@@ -122,6 +122,25 @@ async function main() {
     await prisma.employee.update({ where: { id: employeeId }, data: { userId: user.id } });
   }
 
+  // One EMPLOYEE-level login, reporting to a seeded manager — needed to
+  // exercise role-scoped reads (self-only leave/attendance visibility) from
+  // outside the ADMIN/MANAGER logins above.
+  const employeeLogin = { name: 'Diego Ramirez', email: 'diego.ramirez@acme.dev' };
+  {
+    const employeeId = created[employeeLogin.name];
+    const user = await prisma.user.upsert({
+      where: { email: employeeLogin.email },
+      update: {},
+      create: {
+        tenantId: tenant.id,
+        email: employeeLogin.email,
+        passwordHash,
+        role: 'EMPLOYEE',
+      },
+    });
+    await prisma.employee.update({ where: { id: employeeId }, data: { userId: user.id } });
+  }
+
   // Today's attendance for everyone but the on-leave/inactive folks.
   // Must match businessDateUTC(tenant.timezone) — the app's own notion of
   // "today" — not local machine midnight, or seeded rows land on the
@@ -184,6 +203,7 @@ async function main() {
   console.log('  emma.novak@acme.dev    (MANAGER, Sales)');
   console.log('  marcus.lee@acme.dev    (MANAGER, Marketing)');
   console.log('  nadia.petrova@acme.dev (MANAGER, Finance)');
+  console.log('  diego.ramirez@acme.dev (EMPLOYEE, Engineering)');
 }
 
 main()

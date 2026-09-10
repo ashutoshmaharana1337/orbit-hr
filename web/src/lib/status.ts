@@ -37,8 +37,9 @@ export const apiAttendanceStatusMeta = {
   ABSENT: { color: statusColors.critical, label: "Absent" },
 } as const
 
-export const leaveStatusMeta = {
-  pending: { color: statusColors.warning, label: "Pending" },
-  approved: { color: statusColors.good, label: "Approved" },
-  rejected: { color: statusColors.critical, label: "Rejected" },
+// Keyed by the real API's UPPERCASE enum (LeaveStatus in lib/api/types.ts).
+export const apiLeaveStatusMeta = {
+  PENDING: { color: statusColors.warning, label: "Pending" },
+  APPROVED: { color: statusColors.good, label: "Approved" },
+  REJECTED: { color: statusColors.critical, label: "Rejected" },
 } as const

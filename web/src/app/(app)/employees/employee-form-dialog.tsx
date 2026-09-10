@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { departments } from "@/lib/mock-data"
+import { departments } from "@/lib/departments"
 import { ApiError } from "@/lib/api-client"
 import type { CreateEmployeeInput, EmployeeDetail, EmployeeStatus } from "@/lib/api/types"
 import { useCreateEmployee, useEmployees, useUpdateEmployee } from "@/hooks/use-employees"

@@ -11,6 +11,7 @@ import { EmployeesModule } from './employees/employees.module.js';
 import { AttendanceModule } from './attendance/attendance.module.js';
 import { LeaveModule } from './leave/leave.module.js';
 import { TenantModule } from './tenant/tenant.module.js';
+import { DashboardModule } from './dashboard/dashboard.module.js';
 import { DebugModule } from './debug/debug.module.js';
 
 @Module({
@@ -29,6 +30,7 @@ import { DebugModule } from './debug/debug.module.js';
     EmployeesModule,
     AttendanceModule,
     LeaveModule,
+    DashboardModule,
     TenantModule,
     // Dev-only request log viewer — never registered in production.
     ...(process.env.NODE_ENV === 'production' ? [] : [DebugModule]),

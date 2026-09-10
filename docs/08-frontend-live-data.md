@@ -90,14 +90,50 @@ PR, verified against a live API + Postgres, not just typechecked.
   errors other than the expected pre-login `401` on the `/auth/me` probe
   (the same one `login/page.tsx` already tolerates).
 
-### Not yet done
+## Attendance screen (second increment)
 
-- Attendance, Leave, and Dashboard screens — still on `mock-data.ts`.
-- The two dashboard aggregate endpoints (`GET /dashboard/stats`,
-  `GET /attendance/trend?days=7`) the review calls for — not built yet,
-  land with the Dashboard screen.
-- The department landing page (`d/[department]/page.tsx`) still renders
-  from mock `employees`/`departments` — only its `initials` import was
-  repointed (mechanical fix, `mock-data.ts` no longer exports it).
-- Deleting `mock-data.ts` — the review's own milestone for "done," and it
-  still backs three screens.
+- `attendance/page.tsx` — now wired to `GET /attendance/today` and `GET /attendance/summary` via
+  `useTodayAttendance()` and `useAttendanceSummary()`. Clock in/out now use
+  `useClockIn()` and `useClockOut()` mutations.
+- Proper loading/error states on the attendance table.
+- Real-time updates via TanStack Query cache invalidation.
+
+## Leave screen (third increment)
+
+- `leave/leave-board.tsx` — completely refactored to use real API:
+  - `useLeaveRequests()` for list with status filtering (pending/approved/rejected)
+  - `useCreateLeaveRequest()` for new leave requests
+  - `useApproveLeave()` and `useRejectLeave()` for the approval workflow
+  - Role-based visibility: ADMIN/HR see all leaves, MANAGER sees team's, EMPLOYEE sees own
+  - Tab-based filtering (all/pending/approved/rejected)
+- Leave balance tracking enforced server-side.
+
+## Dashboard screen (fourth increment)
+
+- `dashboard/page.tsx` — now uses `useDashboardStats()` for aggregate metrics
+  and `useLeaveRequests({ status: "PENDING" })` for pending approvals.
+- `attendance-trend-chart.tsx` — uses `useAttendanceTrend()` to fetch 7-day trend
+  from `GET /attendance/trend?days=7`.
+- `department-chart.tsx` — uses `useDashboardStats()` for headcount by department.
+
+## Department landing page (final increment)
+
+- `d/[department]/page.tsx` — converted from server-side static generation to
+  client-side rendering, uses `useEmployees({ department })` to fetch real data.
+
+## Backend endpoints (supporting Phase 2)
+
+- `GET /dashboard/stats` — returns `{ totalEmployees, onLeaveToday, pendingLeaveRequests,
+  attendanceRate, headcountByDepartment }`, properly tenant-scoped.
+- `GET /attendance/trend?days=7` — returns `{ day, present, onLeave }` entries for
+  the last N days, timezone-aware.
+
+## ✅ Phase 2 Complete
+
+- All four main screens (Employees, Attendance, Leave, Dashboard) now fetch real API data.
+- Department landing page wired to real API.
+- `mock-data.ts` deleted — no mock data remains in the codebase.
+- All endpoints verified working with proper tenant isolation, timezone handling,
+  and role-based access control.
+- TypeScript strict mode: no errors across web and API.
+- Production build: successful webpack compilation.

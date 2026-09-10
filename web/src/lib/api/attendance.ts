@@ -1,5 +1,5 @@
 import { apiFetch } from "@/lib/api-client"
-import type { AttendanceRecord, AttendanceSummaryEntry } from "./types"
+import type { AttendanceRecord, AttendanceSummaryEntry, AttendanceTrendEntry } from "./types"
 
 export function listTodayAttendance() {
   return apiFetch<AttendanceRecord[]>("/attendance/today")
@@ -7,6 +7,10 @@ export function listTodayAttendance() {
 
 export function getAttendanceSummary() {
   return apiFetch<AttendanceSummaryEntry[]>("/attendance/summary")
+}
+
+export function getAttendanceTrend(days = 7) {
+  return apiFetch<AttendanceTrendEntry[]>(`/attendance/trend?days=${days}`)
 }
 
 export function clockIn() {

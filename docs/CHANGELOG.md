@@ -2,6 +2,39 @@
 
 Chronological log of work done on Orbit HR so far. Newest first.
 
+## Session 9 — Phase 2 Complete: All screens wired to live API
+
+Completed phase 2 of the production-readiness review's roadmap. All four main screens
+(Employees, Attendance, Leave, Dashboard) now fetch real data from the API via TanStack Query.
+The department landing page is also wired to the real API. Mock data (`src/lib/mock-data.ts`)
+is completely removed from the codebase.
+
+**What was wired:**
+- **Attendance screen** — clock in/out, today's records, and attendance summary via
+  `GET /attendance/today`, `GET /attendance/summary`, and mutations for clock actions.
+- **Leave screen** — full CRUD for leave requests, approve/reject workflow, leave balance
+  tracking, role-based visibility (ADMIN/HR see all, MANAGER sees team's, EMPLOYEE sees own).
+- **Dashboard screen** — aggregate stats and 7-day attendance trend charts.
+- **Two new backend endpoints**: `GET /dashboard/stats` (summary metrics by tenant) and
+  `GET /attendance/trend?days=7` (historical attendance data with timezone awareness).
+- **Department landing page** — converted from static server-side generation to client-side
+  rendering, now uses `useEmployees({ department })` for real data.
+
+**Verification:**
+- All screens verified against a live API + Postgres via script-driven tests and browser testing.
+- Lint, typecheck, and production build all pass.
+- Role-based access control enforced properly (UI gates match API enforcement).
+- Tenant isolation verified (both application and database layers).
+- Timezone handling correct (attendance/leave dates computed in tenant timezone).
+
+**Phase 2 milestones hit:**
+- ✅ All frontend screens wired to the real API
+- ✅ `mock-data.ts` deleted (no mock data remains)
+- ✅ Production build successful
+- ✅ All endpoints properly secured and tenant-scoped
+
+Phase 3 (completing the data model, infra, observability) is next.
+
 ## Session 8 — Phase 2: Employees screen on live data
 
 Started phase 2 of the review's roadmap (wiring `web/` off mock data).
