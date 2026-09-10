@@ -151,17 +151,53 @@ export class LeaveService {
       }
     }
 
+    // For tracked leave types, validate and update balance
     if (approve && (request.type === 'ANNUAL' || request.type === 'SICK')) {
-      const balance = await this.prisma.leaveBalance.findUniqueOrThrow({ where: { employeeId: request.employeeId } });
-      const field = request.type === 'ANNUAL' ? 'annualUsed' : 'sickUsed';
-      const total = request.type === 'ANNUAL' ? balance.annualTotal : balance.sickTotal;
-      if (balance[field] + request.days > total) {
+      // Map LeaveType to LeavePolicy name
+      const policyNameMap = {
+        ANNUAL: 'Annual Leave',
+        SICK: 'Sick Leave',
+      };
+      const policyName = policyNameMap[request.type];
+
+      // Find the corresponding leave policy
+      const leavePolicy = await this.prisma.leavePolicy.findFirst({
+        where: { tenantId, name: policyName },
+      });
+
+      if (!leavePolicy) {
+        throw new BadRequestException(`Leave policy "${policyName}" not found for this tenant`);
+      }
+
+      // Get or create balance for this employee, policy, and year
+      const currentYear = new Date().getFullYear();
+      const balance = await this.prisma.leaveBalance.findFirst({
+        where: {
+          tenantId,
+          employeeId: request.employeeId,
+          leavePolicyId: leavePolicy.id,
+          year: currentYear,
+        },
+      });
+
+      if (!balance) {
+        throw new BadRequestException(`Leave balance not found for this employee in ${currentYear}`);
+      }
+
+      // Check if approval would exceed balance
+      const newUsedDays = Number(balance.usedDays) + request.days;
+      if (newUsedDays > Number(balance.entitledDays)) {
         throw new BadRequestException('Approving this request would exceed the remaining leave balance');
       }
-      await this.prisma.leaveBalance.update({
-        where: { employeeId: request.employeeId },
-        data: { [field]: { increment: request.days } },
-      });
+
+      // Deduct days from balance
+      await this.leaveBalances.deductDays(
+        tenantId,
+        request.employeeId,
+        leavePolicy.id,
+        currentYear,
+        request.days,
+      );
     }
 
     return this.prisma.leaveRequest.update({
