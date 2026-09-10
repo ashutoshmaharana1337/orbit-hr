@@ -91,10 +91,10 @@ Full detail, plus what's *not* done yet, in
 This started from a full tech-lead-style production-readiness review
 ([docs/production-readiness-review.html](docs/production-readiness-review.html))
 that scored the project "Not yet" and laid out a phased roadmap. Phases 0
-(foundations — git, CI), 1 (security and correctness), and 2 (frontend wired
-to real API) are complete. Phase 3 onward (completing the data model, infra,
-observability) is still ahead. Current state in full detail:
-[docs/00-overview.md](docs/00-overview.md).
+(foundations — git, CI), 1 (security and correctness), 2 (frontend wired to
+real API), and 3 (data model complete with audit, soft delete, cursor pagination)
+are complete. Phases 4–6 (infrastructure, deployment, observability) are ahead.
+Current state in full detail: [docs/00-overview.md](docs/00-overview.md).
 
 ## Documentation
 

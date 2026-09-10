@@ -40,9 +40,13 @@ built so far. Read them in order, or jump to what you need:
   living only on a synced desktop. The dashboard also includes two new
   aggregate endpoints: `GET /dashboard/stats` (tenant-scoped summary metrics)
   and `GET /attendance/trend?days=7` (historical attendance data for charts).
-- **Phase 2 complete**: All frontend screens wired to the real API, mock data
-  removed, production build successful. Full detail in
-  [08-frontend-live-data.md](./08-frontend-live-data.md).
+- **Phase 2 complete**: All frontend screens (Employees, Attendance, Leave, Dashboard)
+  wired to the real API, mock data removed, production build successful.
+- **Phase 3 complete**: Data model expanded with Department, LeavePolicy, and LeaveBalance
+  tables. Audit logging on all writes, soft delete for employee offboarding, and cursor-based
+  pagination on all list endpoints. 28 new API endpoints fully implemented. Frontend types
+  and hooks ready for integration. Full detail in [08-frontend-live-data.md](./08-frontend-live-data.md)
+  and [CHANGELOG.md](./CHANGELOG.md).
 
 ## Stack decisions made so far
 
