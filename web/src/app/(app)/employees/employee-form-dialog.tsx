@@ -249,7 +249,7 @@ export function EmployeeFormDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={NO_MANAGER}>No manager</SelectItem>
-                  {managerOptions.data
+                  {managerOptions.data?.items
                     ?.filter((e) => e.id !== employee?.id)
                     .map((e) => (
                       <SelectItem key={e.id} value={e.id}>

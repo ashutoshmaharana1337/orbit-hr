@@ -77,7 +77,7 @@ export class AuthService {
         name: dto.fullName,
         email: dto.email,
         title: 'Administrator',
-        department: 'People',
+        departmentId: null,
         location: 'Unspecified',
         status: 'ACTIVE',
         joinDate: new Date(),

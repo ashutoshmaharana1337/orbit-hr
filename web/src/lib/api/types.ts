@@ -4,6 +4,11 @@
 
 export type Role = "ADMIN" | "HR" | "MANAGER" | "EMPLOYEE"
 
+export type EmployeeStatus = "ACTIVE" | "ON_LEAVE" | "INACTIVE"
+export type LeaveStatus = "PENDING" | "APPROVED" | "REJECTED"
+export type LeaveType = "ANNUAL" | "SICK" | "WORK_FROM_HOME" | "UNPAID"
+export type AttendanceStatus = "PRESENT" | "LATE" | "WFH" | "ABSENT"
+
 // Cursor-based pagination response wrapper
 export interface CursorPaginatedResponse<T> {
   items: T[]
@@ -11,13 +16,18 @@ export interface CursorPaginatedResponse<T> {
   hasMore: boolean
 }
 
-export type EmployeeStatus = "ACTIVE" | "ON_LEAVE" | "INACTIVE"
-
 // Department type for the Department model
 export type Department = {
   id: string
   name: string
   description?: string
+}
+
+// Leave policy type (for future use when department-based policies are added)
+export type LeavePolicy = {
+  type: LeaveType
+  total: number
+  used: number
 }
 
 // What GET /employees returns per row. Non-privileged viewers (an EMPLOYEE
@@ -36,12 +46,6 @@ export type EmployeeSummary = {
   location?: string
   phone?: string
   joinDate?: string
-}
-
-export type LeavePolicy = {
-  type: LeaveType
-  total: number
-  used: number
 }
 
 export type EmployeeDetail = EmployeeSummary & {
@@ -80,13 +84,6 @@ export type ListEmployeesParams = {
   limit?: number
 }
 
-export type PaginatedResponse<T> = {
-  items: T[]
-  nextCursor: string | null
-  hasMore: boolean
-}
-
-export type AttendanceStatus = "PRESENT" | "LATE" | "WFH" | "ABSENT"
 
 // What GET /attendance/today returns per row — always tenant-wide, not
 // role-filtered (see api/src/attendance/attendance.controller.ts).
@@ -111,9 +108,6 @@ export type AttendanceTrendEntry = {
   present: number
   onLeave: number
 }
-
-export type LeaveStatus = "PENDING" | "APPROVED" | "REJECTED"
-export type LeaveType = "ANNUAL" | "SICK" | "WORK_FROM_HOME" | "UNPAID"
 
 // What POST /leave, PATCH /leave/:id/approve, and PATCH /leave/:id/reject
 // return — no `employee` include on those responses.
@@ -165,4 +159,15 @@ export type DashboardStats = {
   pendingLeaveRequests: number
   attendanceRate: number
   headcountByDepartment: { department: string; count: number }[]
+}
+
+export type ListDepartmentsParams = {
+  search?: string
+  cursor?: string
+  limit?: number
+}
+
+export type ListLeavePoliciesParams = {
+  cursor?: string
+  limit?: number
 }

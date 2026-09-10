@@ -28,7 +28,7 @@ export class AttendanceService {
         date: businessDateUTC(timezone),
         employee: SoftDeleteService.whereActive({}),
       },
-      include: { employee: { select: { id: true, name: true, department: true } } },
+      include: { employee: { select: { id: true, name: true, departmentId: true } } },
       orderBy: { employee: { name: 'asc' } },
     });
   }

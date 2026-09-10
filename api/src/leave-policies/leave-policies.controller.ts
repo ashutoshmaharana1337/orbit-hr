@@ -15,8 +15,8 @@ export class LeavePolicesController {
   constructor(private readonly leavePolicies: LeavePolicesService) {}
 
   @Get()
-  list(@CurrentUser() user: JwtPayload) {
-    return this.leavePolicies.list(user.tenantId);
+  list(@CurrentUser() user: JwtPayload, @Query() query: ListLeavePoliciesQuery) {
+    return this.leavePolicies.list(user.tenantId, query);
   }
 
   @Get(':id')

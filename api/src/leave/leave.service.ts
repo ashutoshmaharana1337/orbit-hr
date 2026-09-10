@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { PrismaService } from '../prisma/prisma.service.js';
 import { SoftDeleteService } from '../common/soft-delete.service.js';
 import { EmployeesService } from '../employees/employees.service.js';
+import { LeaveBalancesService } from '../leave-balances/leave-balances.service.js';
 import type { CreateLeaveRequestDto } from './dto/create-leave-request.dto.js';
 import type { ListLeaveQuery } from './dto/list-leave.query.js';
 import type { JwtPayload } from '../auth/auth.types.js';
@@ -16,6 +17,7 @@ export class LeaveService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly employees: EmployeesService,
+    private readonly leaveBalances: LeaveBalancesService,
   ) {}
 
   async list(tenantId: string, requester: JwtPayload, query: ListLeaveQuery): Promise<CursorPaginatedResponse<any>> {
@@ -30,7 +32,7 @@ export class LeaveService {
       }
     }
 
-    const include = { employee: { select: { id: true, name: true, department: true } } };
+    const include = { employee: { select: { id: true, name: true, departmentId: true } } };
 
     if (requester.role === 'ADMIN' || requester.role === 'HR') {
       const items = await this.prisma.leaveRequest.findMany({

@@ -43,7 +43,7 @@ export class DashboardService {
           },
         }),
         this.prisma.employee.groupBy({
-          by: ['department'],
+          by: ['departmentId'],
           where: SoftDeleteService.whereActive({ tenantId }),
           _count: true,
         }),
@@ -60,7 +60,7 @@ export class DashboardService {
       onLeaveToday: onLeaveRows.length,
       pendingLeaveRequests,
       attendanceRate,
-      headcountByDepartment: headcountGroups.map((g) => ({ department: g.department, count: g._count })),
+      headcountByDepartment: headcountGroups.map((g) => ({ departmentId: g.departmentId, count: g._count })),
     };
   }
 }
