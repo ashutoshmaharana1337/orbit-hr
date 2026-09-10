@@ -1,9 +1,11 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { SoftDeleteService } from '../common/soft-delete.service.js';
 import { EmployeesService } from '../employees/employees.service.js';
 import type { CreateLeaveRequestDto } from './dto/create-leave-request.dto.js';
 import type { ListLeaveQuery } from './dto/list-leave.query.js';
 import type { JwtPayload } from '../auth/auth.types.js';
+import { toCursor, fromCursor, type CursorPaginatedResponse } from '../common/pagination.js';
 
 function daysBetweenInclusive(start: Date, end: Date) {
   return Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
@@ -16,38 +18,93 @@ export class LeaveService {
     private readonly employees: EmployeesService,
   ) {}
 
-  async list(tenantId: string, requester: JwtPayload, query: ListLeaveQuery) {
+  async list(tenantId: string, requester: JwtPayload, query: ListLeaveQuery): Promise<CursorPaginatedResponse<any>> {
+    const limit = query.limit ?? 20;
+    // Decode cursor if provided
+    let cursorId: string | undefined;
+    if (query.cursor) {
+      try {
+        cursorId = fromCursor(query.cursor);
+      } catch {
+        throw new Error('Invalid cursor');
+      }
+    }
+
     const include = { employee: { select: { id: true, name: true, department: true } } };
-    const orderBy = { appliedOn: 'desc' as const };
 
     if (requester.role === 'ADMIN' || requester.role === 'HR') {
-      return this.prisma.leaveRequest.findMany({
-        where: { tenantId, status: query.status || undefined, employeeId: query.employeeId || undefined },
+      const items = await this.prisma.leaveRequest.findMany({
+        where: {
+          tenantId,
+          status: query.status || undefined,
+          employeeId: query.employeeId || undefined,
+          employee: SoftDeleteService.whereActive({}),
+          ...(cursorId ? { id: { gt: cursorId } } : {}),
+        },
         include,
-        orderBy,
+        orderBy: { id: 'asc' },
+        take: limit + 1,
       });
+
+      const hasMore = items.length > limit;
+      const returnItems = items.slice(0, limit);
+      const nextCursor = hasMore ? toCursor(returnItems[returnItems.length - 1].id) : null;
+
+      return {
+        items: returnItems,
+        nextCursor,
+        hasMore,
+      };
     }
 
     const self = await this.employees.findByUserId(tenantId, requester.sub);
 
     if (requester.role === 'MANAGER') {
-      return this.prisma.leaveRequest.findMany({
+      const items = await this.prisma.leaveRequest.findMany({
         where: {
           tenantId,
           status: query.status || undefined,
-          employee: { OR: [{ id: self.id }, { managerId: self.id }] },
+          employee: SoftDeleteService.whereActive({ OR: [{ id: self.id }, { managerId: self.id }] }),
+          ...(cursorId ? { id: { gt: cursorId } } : {}),
         },
         include,
-        orderBy,
+        orderBy: { id: 'asc' },
+        take: limit + 1,
       });
+
+      const hasMore = items.length > limit;
+      const returnItems = items.slice(0, limit);
+      const nextCursor = hasMore ? toCursor(returnItems[returnItems.length - 1].id) : null;
+
+      return {
+        items: returnItems,
+        nextCursor,
+        hasMore,
+      };
     }
 
     // EMPLOYEE: own requests only. A colleague's leave reason is not this role's business.
-    return this.prisma.leaveRequest.findMany({
-      where: { tenantId, status: query.status || undefined, employeeId: self.id },
+    const items = await this.prisma.leaveRequest.findMany({
+      where: {
+        tenantId,
+        status: query.status || undefined,
+        employeeId: self.id,
+        ...(cursorId ? { id: { gt: cursorId } } : {}),
+      },
       include,
-      orderBy,
+      orderBy: { id: 'asc' },
+      take: limit + 1,
     });
+
+    const hasMore = items.length > limit;
+    const returnItems = items.slice(0, limit);
+    const nextCursor = hasMore ? toCursor(returnItems[returnItems.length - 1].id) : null;
+
+    return {
+      items: returnItems,
+      nextCursor,
+      hasMore,
+    };
   }
 
   async create(tenantId: string, userId: string, dto: CreateLeaveRequestDto) {
@@ -116,7 +173,9 @@ export class LeaveService {
   }
 
   async balance(tenantId: string, employeeId: string, requester: JwtPayload) {
-    const employee = await this.prisma.employee.findFirst({ where: { id: employeeId, tenantId } });
+    const employee = await this.prisma.employee.findFirst({
+      where: SoftDeleteService.whereActive({ id: employeeId, tenantId }),
+    });
     if (!employee) throw new NotFoundException('Employee not found');
 
     if (requester.role !== 'ADMIN' && requester.role !== 'HR') {

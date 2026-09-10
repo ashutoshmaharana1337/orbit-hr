@@ -38,12 +38,12 @@ export function EmployeeDirectory() {
   const role = useAuth().user?.role
   const canManageEmployees = role === "ADMIN" || role === "HR"
 
-  const { data: employees, isLoading, isError, error } = useEmployees({
+  const { data: response, isLoading, isError, error } = useEmployees({
     search: query.trim() || undefined,
     department: department === "all" ? undefined : department,
   })
 
-  const filtered = useMemo(() => employees ?? [], [employees])
+  const filtered = useMemo(() => response?.items ?? [], [response?.items])
 
   return (
     <div className="flex flex-1 flex-col gap-4">

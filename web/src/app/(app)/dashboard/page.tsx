@@ -119,7 +119,7 @@ export default function DashboardPage() {
               <div className="flex flex-col gap-3">
                 {pendingLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
                 {!pendingLoading &&
-                  pendingLeave?.slice(0, 4).map((req) => (
+                  pendingLeave?.items?.slice(0, 4).map((req) => (
                     <div key={req.id} className="flex items-center gap-3">
                       <PersonAvatar
                         name={req.employee.name}
@@ -136,7 +136,7 @@ export default function DashboardPage() {
                       <Tag color={statusColors.warning}>Pending</Tag>
                     </div>
                   ))}
-                {!pendingLoading && (pendingLeave?.length ?? 0) === 0 && (
+                {!pendingLoading && (pendingLeave?.items?.length ?? 0) === 0 && (
                   <p className="text-sm text-muted-foreground">No pending requests. You&apos;re all caught up.</p>
                 )}
               </div>

@@ -51,6 +51,12 @@ enum PasswordTokenPurpose {
   RESET
 }
 
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+}
+
 model Tenant {
   id                String   @id @default(uuid())
   name              String
@@ -59,10 +65,14 @@ model Tenant {
   lateCutoffMinutes Int      @default(600) // minutes since local midnight, e.g. 600 = 10:00
   createdAt         DateTime @default(now())
 
-  users            User[]
-  employees        Employee[]
+  users             User[]
+  employees         Employee[]
+  departments       Department[]
   attendanceRecords AttendanceRecord[]
-  leaveRequests    LeaveRequest[]
+  leaveRequests     LeaveRequest[]
+  leavePolicies     LeavePolicy[]
+  leaveBalances     LeaveBalance[]
+  auditLogs         AuditLog[]
 }
 
 model User {
@@ -108,34 +118,52 @@ model PasswordSetToken {
   @@index([userId])
 }
 
-model Employee {
-  id         String         @id @default(uuid())
-  tenantId   String
-  userId     String?        @unique
-  name       String
-  email      String
-  title      String
-  department String
-  location   String
-  status     EmployeeStatus @default(ACTIVE)
-  managerId  String?
-  joinDate   DateTime
-  phone      String
-  createdAt  DateTime       @default(now())
-  updatedAt  DateTime       @updatedAt
+model Department {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  tenant Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user   User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
-  manager   Employee?  @relation("EmployeeManager", fields: [managerId], references: [id], onDelete: SetNull)
-  reports   Employee[] @relation("EmployeeManager")
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employees Employee[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model Employee {
+  id           String         @id @default(uuid())
+  tenantId     String
+  userId       String?        @unique
+  name         String
+  email        String
+  title        String
+  departmentId String?
+  location     String
+  status       EmployeeStatus @default(ACTIVE)
+  managerId    String?
+  joinDate     DateTime
+  phone        String
+  deletedAt    DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user       User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  manager    Employee?   @relation("EmployeeManager", fields: [managerId], references: [id], onDelete: SetNull)
+  reports    Employee[]  @relation("EmployeeManager")
 
   attendanceRecords AttendanceRecord[]
   leaveRequests     LeaveRequest[]
-  leaveBalance      LeaveBalance?
+  leaveBalances     LeaveBalance[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
-  @@index([tenantId, department])
+  @@index([tenantId, departmentId])
+  @@index([tenantId, deletedAt])
 }
 
 model AttendanceRecord {
@@ -177,13 +205,61 @@ model LeaveRequest {
   @@index([employeeId])
 }
 
-model LeaveBalance {
-  id          String @id @default(uuid())
-  employeeId  String @unique
-  annualUsed  Int    @default(0)
-  annualTotal Int    @default(18)
-  sickUsed    Int    @default(0)
-  sickTotal   Int    @default(10)
+model LeavePolicy {
+  id                    String   @id @default(uuid())
+  tenantId              String
+  name                  String
+  workingDaysPerWeek    Int      @default(5)
+  publicHolidaysPerYear Int      @default(0)
+  entitlementDays       Int
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
-  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  leaveBalances LeaveBalance[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model LeaveBalance {
+  id             String   @id @default(uuid())
+  tenantId       String
+  employeeId     String
+  leavePolicyId  String
+  year           Int
+  entitledDays   Decimal  @db.Decimal(10, 2)
+  usedDays       Decimal  @db.Decimal(10, 2) @default(0)
+  balanceDays    Decimal  @db.Decimal(10, 2)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee    Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leavePolicy LeavePolicy @relation(fields: [leavePolicyId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, employeeId, leavePolicyId, year])
+  @@index([tenantId, employeeId])
+  @@index([tenantId, year])
+}
+
+model AuditLog {
+  id                 String      @id @default(uuid())
+  tenantId           String
+  entityType         String      // "Employee", "LeaveRequest", "LeaveBalance", "Department", "AttendanceRecord"
+  entityId           String      // UUID of the entity being changed
+  action             AuditAction // CREATE, UPDATE, DELETE
+  userId             String?     // who made the change (Employee userId linked)
+  userRole           String?     // their role at the time
+  beforeValues       Json?       // the row before the change (for UPDATE)
+  afterValues        Json?       // the row after the change (for UPDATE, CREATE)
+  changeDescription  String?     // human-readable summary if applicable
+  timestamp          DateTime    @default(now())
+  createdAt          DateTime    @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, timestamp])
+  @@index([tenantId, userId])
 }

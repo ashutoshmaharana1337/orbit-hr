@@ -1,5 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { SoftDeleteService } from '../common/soft-delete.service.js';
 import { EmployeesService } from '../employees/employees.service.js';
 import { businessDateUTC, minutesSinceLocalMidnight } from './business-time.js';
 import type { UpsertAttendanceDto } from './dto/upsert-attendance.dto.js';
@@ -22,7 +23,11 @@ export class AttendanceService {
   async today(tenantId: string) {
     const { timezone } = await this.getTenantTimeSettings(tenantId);
     return this.prisma.attendanceRecord.findMany({
-      where: { tenantId, date: businessDateUTC(timezone) },
+      where: {
+        tenantId,
+        date: businessDateUTC(timezone),
+        employee: SoftDeleteService.whereActive({}),
+      },
       include: { employee: { select: { id: true, name: true, department: true } } },
       orderBy: { employee: { name: 'asc' } },
     });

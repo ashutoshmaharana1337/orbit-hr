@@ -1,6 +1,7 @@
 import { apiFetch } from "@/lib/api-client"
 import type {
   CreateEmployeeInput,
+  CursorPaginatedResponse,
   EmployeeDetail,
   EmployeeSummary,
   ListEmployeesParams,
@@ -10,14 +11,16 @@ import type {
 function toQueryString(params?: ListEmployeesParams) {
   if (!params) return ""
   const entries = Object.entries(params).filter(
-    (entry): entry is [string, string] => !!entry[1]
+    (entry): entry is [string, string | number] => entry[1] !== undefined && entry[1] !== null && entry[1] !== ""
   )
   if (!entries.length) return ""
-  return `?${new URLSearchParams(entries).toString()}`
+  return `?${new URLSearchParams(
+    entries.map(([k, v]) => [k, String(v)])
+  ).toString()}`
 }
 
 export function listEmployees(params?: ListEmployeesParams) {
-  return apiFetch<EmployeeSummary[]>(`/employees${toQueryString(params)}`)
+  return apiFetch<CursorPaginatedResponse<EmployeeSummary>>(`/employees${toQueryString(params)}`)
 }
 
 export function getEmployee(id: string) {

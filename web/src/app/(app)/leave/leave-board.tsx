@@ -249,7 +249,7 @@ export function LeaveBoard() {
               </TableRow>
             )}
             {!isError &&
-              requests?.map((req) => {
+              requests?.items?.map((req) => {
                 const meta = apiLeaveStatusMeta[req.status]
                 const sameDay = formatDate(req.startDate) === formatDate(req.endDate)
                 return (
@@ -291,7 +291,7 @@ export function LeaveBoard() {
                   </TableRow>
                 )
               })}
-            {!isError && !isLoading && (requests?.length ?? 0) === 0 && (
+            {!isError && !isLoading && (requests?.items?.length ?? 0) === 0 && (
               <TableRow>
                 <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
                   No requests in this view.

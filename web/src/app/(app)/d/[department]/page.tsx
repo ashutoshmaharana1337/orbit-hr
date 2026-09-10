@@ -19,7 +19,7 @@ export default function DepartmentLandingPage() {
   const { department: slug } = useParams<{ department: string }>()
   const knownDepartment = departments.find((d) => d.toLowerCase() === slug.toLowerCase())
 
-  const { data: deptEmployees, isLoading } = useEmployees({ department: knownDepartment ?? slug })
+  const { data: deptEmployeesResponse, isLoading } = useEmployees({ department: knownDepartment ?? slug })
 
   if (isLoading) {
     return (
@@ -32,7 +32,7 @@ export default function DepartmentLandingPage() {
     )
   }
 
-  const employeesList = deptEmployees ?? []
+  const employeesList = deptEmployeesResponse?.items ?? []
 
   if (!knownDepartment && employeesList.length === 0) {
     return (

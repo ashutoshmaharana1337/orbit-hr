@@ -12,7 +12,12 @@ import { AttendanceModule } from './attendance/attendance.module.js';
 import { LeaveModule } from './leave/leave.module.js';
 import { TenantModule } from './tenant/tenant.module.js';
 import { DashboardModule } from './dashboard/dashboard.module.js';
+import { DepartmentsModule } from './departments/departments.module.js';
 import { DebugModule } from './debug/debug.module.js';
+import { AuditModule } from './audit/audit.module.js';
+import { AuditInterceptor } from './audit/audit.interceptor.js';
+import { LeavePolicesModule } from './leave-policies/leave-policies.module.js';
+import { LeaveBalancesModule } from './leave-balances/leave-balances.module.js';
 
 @Module({
   imports: [
@@ -30,8 +35,12 @@ import { DebugModule } from './debug/debug.module.js';
     EmployeesModule,
     AttendanceModule,
     LeaveModule,
+    LeavePolicesModule,
+    LeaveBalancesModule,
     DashboardModule,
+    DepartmentsModule,
     TenantModule,
+    AuditModule,
     // Dev-only request log viewer — never registered in production.
     ...(process.env.NODE_ENV === 'production' ? [] : [DebugModule]),
   ],
@@ -40,6 +49,7 @@ import { DebugModule } from './debug/debug.module.js';
     AppService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_INTERCEPTOR, useClass: TenantTransactionInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
   ],
 })
 export class AppModule {}

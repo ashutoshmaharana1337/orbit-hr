@@ -19,7 +19,7 @@ const today = new Date().toLocaleDateString("en-US", {
 export default function AttendancePage() {
   const { data: summaryData } = useAttendanceSummary()
   const { data: todayAttendance } = useTodayAttendance()
-  const { data: employees } = useEmployees()
+  const { data: employeesResponse } = useEmployees()
 
   const summary = STATUSES.map((status) => ({
     status,
@@ -28,7 +28,7 @@ export default function AttendancePage() {
   }))
 
   const clockedIn = todayAttendance?.length ?? 0
-  const total = employees?.length
+  const total = employeesResponse?.items?.length
 
   return (
     <div className="flex flex-1 flex-col">

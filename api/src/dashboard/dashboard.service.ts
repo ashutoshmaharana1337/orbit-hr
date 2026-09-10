@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { SoftDeleteService } from '../common/soft-delete.service.js';
 import { AttendanceService } from '../attendance/attendance.service.js';
 import { businessDateUTC } from '../attendance/business-time.js';
 
@@ -19,15 +20,33 @@ export class DashboardService {
 
     const [totalEmployees, activeEmployeeCount, onLeaveRows, pendingLeaveRequests, headcountGroups, attendanceSummary] =
       await Promise.all([
-        this.prisma.employee.count({ where: { tenantId } }),
-        this.prisma.employee.count({ where: { tenantId, status: 'ACTIVE' } }),
+        this.prisma.employee.count({ where: SoftDeleteService.whereActive({ tenantId }) }),
+        this.prisma.employee.count({
+          where: SoftDeleteService.whereActive({ tenantId, status: 'ACTIVE' }),
+        }),
         this.prisma.leaveRequest.findMany({
-          where: { tenantId, status: 'APPROVED', startDate: { lte: today }, endDate: { gte: today } },
+          where: {
+            tenantId,
+            status: 'APPROVED',
+            startDate: { lte: today },
+            endDate: { gte: today },
+            employee: SoftDeleteService.whereActive({}),
+          },
           select: { employeeId: true },
           distinct: ['employeeId'],
         }),
-        this.prisma.leaveRequest.count({ where: { tenantId, status: 'PENDING' } }),
-        this.prisma.employee.groupBy({ by: ['department'], where: { tenantId }, _count: true }),
+        this.prisma.leaveRequest.count({
+          where: {
+            tenantId,
+            status: 'PENDING',
+            employee: SoftDeleteService.whereActive({}),
+          },
+        }),
+        this.prisma.employee.groupBy({
+          by: ['department'],
+          where: SoftDeleteService.whereActive({ tenantId }),
+          _count: true,
+        }),
         this.attendance.summary(tenantId),
       ]);
 

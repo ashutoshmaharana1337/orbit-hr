@@ -1,34 +1,53 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { SoftDeleteService } from '../common/soft-delete.service.js';
 import type { CreateEmployeeDto } from './dto/create-employee.dto.js';
 import type { UpdateEmployeeDto } from './dto/update-employee.dto.js';
 import type { ListEmployeesQuery } from './dto/list-employees.query.js';
 import type { JwtPayload } from '../auth/auth.types.js';
+import { toCursor, fromCursor, type CursorPaginatedResponse } from '../common/pagination.js';
 
 const PUBLIC_DIRECTORY_FIELDS = {
   id: true,
   name: true,
   title: true,
-  department: true,
+  departmentId: true,
   status: true,
   managerId: true,
 } as const;
 
 @Injectable()
 export class EmployeesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly softDelete: SoftDeleteService,
+  ) {}
 
-  /** Confirms `id` names an Employee in `tenantId`. Throws 404 otherwise (never leaks cross-tenant existence). */
+  /** Confirms `id` names an active (non-soft-deleted) Employee in `tenantId`. Throws 404 otherwise (never leaks cross-tenant existence). */
   async assertBelongsToTenant(tenantId: string, id: string) {
-    const employee = await this.prisma.employee.findFirst({ where: { id, tenantId }, select: { id: true } });
+    const employee = await this.prisma.employee.findFirst({
+      where: SoftDeleteService.whereActive({ id, tenantId }),
+      select: { id: true },
+    });
     if (!employee) throw new NotFoundException('Employee not found');
     return employee;
   }
 
-  async list(tenantId: string, requester: JwtPayload, query: ListEmployeesQuery) {
-    const where = {
+  async list(tenantId: string, requester: JwtPayload, query: ListEmployeesQuery): Promise<CursorPaginatedResponse<any>> {
+    const limit = query.limit ?? 20;
+    // Decode cursor if provided
+    let cursorId: string | undefined;
+    if (query.cursor) {
+      try {
+        cursorId = fromCursor(query.cursor);
+      } catch {
+        throw new Error('Invalid cursor');
+      }
+    }
+
+    const baseWhere = SoftDeleteService.whereActive({
       tenantId,
-      department: query.department || undefined,
+      departmentId: query.departmentId || undefined,
       status: query.status || undefined,
       ...(query.search
         ? {
@@ -39,44 +58,99 @@ export class EmployeesService {
             ],
           }
         : {}),
-    };
+      // Cursor condition: fetch records with ID > cursor ID
+      ...(cursorId ? { id: { gt: cursorId } } : {}),
+    });
 
     if (requester.role === 'ADMIN' || requester.role === 'HR') {
-      return this.prisma.employee.findMany({
-        where,
+      const items = await this.prisma.employee.findMany({
+        where: baseWhere,
         include: { manager: { select: { id: true, name: true } } },
-        orderBy: { name: 'asc' },
+        orderBy: { id: 'asc' },
+        take: limit + 1, // Fetch one extra to determine hasMore
       });
+
+      const hasMore = items.length > limit;
+      const returnItems = items.slice(0, limit);
+      const nextCursor = hasMore ? toCursor(returnItems[returnItems.length - 1].id) : null;
+
+      return {
+        items: returnItems,
+        nextCursor,
+        hasMore,
+      };
     }
 
     const self = await this.findByUserId(tenantId, requester.sub);
 
     if (requester.role === 'MANAGER') {
-      return this.prisma.employee.findMany({
-        where: { ...where, OR: [{ id: self.id }, { managerId: self.id }] },
+      const items = await this.prisma.employee.findMany({
+        where: { ...baseWhere, OR: [{ id: self.id }, { managerId: self.id }] },
         include: { manager: { select: { id: true, name: true } } },
-        orderBy: { name: 'asc' },
+        orderBy: { id: 'asc' },
+        take: limit + 1,
       });
+
+      const hasMore = items.length > limit;
+      const returnItems = items.slice(0, limit);
+      const nextCursor = hasMore ? toCursor(returnItems[returnItems.length - 1].id) : null;
+
+      return {
+        items: returnItems,
+        nextCursor,
+        hasMore,
+      };
     }
 
     // EMPLOYEE: full record for self, public directory subset for everyone else.
-    const [own, directory] = await Promise.all([
+    // Self record is always included (not paginated), only directory is paginated
+    const filterWhere = SoftDeleteService.whereActive({
+      tenantId,
+      departmentId: query.departmentId || undefined,
+      status: query.status || undefined,
+      ...(query.search
+        ? {
+            OR: [
+              { name: { contains: query.search, mode: 'insensitive' as const } },
+              { title: { contains: query.search, mode: 'insensitive' as const } },
+              { email: { contains: query.search, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+    });
+
+    const [ownRecord, directoryItems] = await Promise.all([
       this.prisma.employee.findFirst({
-        where: { ...where, id: self.id },
+        where: { ...filterWhere, id: self.id },
         include: { manager: { select: { id: true, name: true } } },
       }),
       this.prisma.employee.findMany({
-        where: { ...where, id: { not: self.id } },
+        where: { ...filterWhere, id: { not: self.id }, ...(cursorId ? { id: { gt: cursorId } } : {}) },
         select: PUBLIC_DIRECTORY_FIELDS,
-        orderBy: { name: 'asc' },
+        orderBy: { id: 'asc' },
+        take: limit + 1,
       }),
     ]);
-    return [...(own ? [own] : []), ...directory];
+
+    const hasMore = directoryItems.length > limit;
+    const returnDirItems = directoryItems.slice(0, limit);
+    const merged = [...(ownRecord ? [ownRecord] : []), ...returnDirItems];
+
+    let nextCursor: string | null = null;
+    if (hasMore && merged.length > 0) {
+      nextCursor = toCursor(merged[merged.length - 1].id);
+    }
+
+    return {
+      items: merged,
+      nextCursor,
+      hasMore,
+    };
   }
 
   async findOne(tenantId: string, id: string, requester?: JwtPayload) {
     const employee = await this.prisma.employee.findFirst({
-      where: { id, tenantId },
+      where: SoftDeleteService.whereActive({ id, tenantId }),
       include: {
         manager: { select: { id: true, name: true } },
         reports: { select: { id: true, name: true, title: true } },
@@ -105,7 +179,7 @@ export class EmployeesService {
         name: dto.name,
         email: dto.email,
         title: dto.title,
-        department: dto.department,
+        departmentId: dto.departmentId,
         location: dto.location,
         status: dto.status ?? 'ACTIVE',
         managerId: dto.managerId,
@@ -117,7 +191,9 @@ export class EmployeesService {
   }
 
   async findByUserId(tenantId: string, userId: string) {
-    const employee = await this.prisma.employee.findFirst({ where: { tenantId, userId } });
+    const employee = await this.prisma.employee.findFirst({
+      where: SoftDeleteService.whereActive({ tenantId, userId }),
+    });
     if (!employee) throw new NotFoundException('No employee record linked to this account');
     return employee;
   }
@@ -133,6 +209,34 @@ export class EmployeesService {
         ...dto,
         joinDate: dto.joinDate ? new Date(dto.joinDate) : undefined,
       },
+    });
+  }
+
+  /**
+   * Soft-delete an employee (marks as deleted, doesn't remove from DB).
+   * Used for offboarding - keeps audit trail and prevents foreign key issues.
+   */
+  async softDelete(tenantId: string, employeeId: string) {
+    // Verify employee exists and is active
+    await this.assertBelongsToTenant(tenantId, employeeId);
+    return this.softDelete.softDeleteEmployee(tenantId, employeeId);
+  }
+
+  /**
+   * Restore a soft-deleted employee (clears the deletedAt timestamp).
+   */
+  async restore(tenantId: string, employeeId: string) {
+    return this.softDelete.restoreEmployee(tenantId, employeeId);
+  }
+
+  /**
+   * List all soft-deleted employees in a tenant (ADMIN only view).
+   */
+  async listDeleted(tenantId: string) {
+    return this.prisma.employee.findMany({
+      where: SoftDeleteService.whereDeleted({ tenantId }),
+      include: { manager: { select: { id: true, name: true } } },
+      orderBy: { deletedAt: 'desc' },
     });
   }
 }

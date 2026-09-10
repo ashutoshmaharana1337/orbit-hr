@@ -6,6 +6,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
+import { Auditable } from '../audit/auditable.decorator.js';
 import type { JwtPayload } from '../auth/auth.types.js';
 
 @Controller('attendance')
@@ -29,17 +30,20 @@ export class AttendanceController {
   }
 
   @Post('clock-in')
+  @Auditable({ entityType: 'AttendanceRecord' })
   clockIn(@CurrentUser() user: JwtPayload) {
     return this.attendance.clockIn(user.tenantId, user.sub);
   }
 
   @Patch('clock-out')
+  @Auditable({ entityType: 'AttendanceRecord' })
   clockOut(@CurrentUser() user: JwtPayload) {
     return this.attendance.clockOut(user.tenantId, user.sub);
   }
 
   @Post()
   @Roles('ADMIN', 'HR', 'MANAGER')
+  @Auditable({ entityType: 'AttendanceRecord' })
   upsert(@CurrentUser() user: JwtPayload, @Body() dto: UpsertAttendanceDto) {
     return this.attendance.upsert(user.tenantId, dto);
   }

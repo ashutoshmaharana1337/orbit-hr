@@ -4,7 +4,21 @@
 
 export type Role = "ADMIN" | "HR" | "MANAGER" | "EMPLOYEE"
 
+// Cursor-based pagination response wrapper
+export interface CursorPaginatedResponse<T> {
+  items: T[]
+  nextCursor: string | null
+  hasMore: boolean
+}
+
 export type EmployeeStatus = "ACTIVE" | "ON_LEAVE" | "INACTIVE"
+
+// Department type for the Department model
+export type Department = {
+  id: string
+  name: string
+  description?: string
+}
 
 // What GET /employees returns per row. Non-privileged viewers (an EMPLOYEE
 // looking at a colleague) get only the fields in PUBLIC_DIRECTORY_FIELDS on
@@ -13,7 +27,8 @@ export type EmployeeSummary = {
   id: string
   name: string
   title: string
-  department: string
+  departmentId?: string
+  department?: { id: string; name: string } | null
   status: EmployeeStatus
   managerId: string | null
   manager?: { id: string; name: string } | null
@@ -21,6 +36,12 @@ export type EmployeeSummary = {
   location?: string
   phone?: string
   joinDate?: string
+}
+
+export type LeavePolicy = {
+  type: LeaveType
+  total: number
+  used: number
 }
 
 export type EmployeeDetail = EmployeeSummary & {
@@ -55,6 +76,14 @@ export type ListEmployeesParams = {
   search?: string
   department?: string
   status?: EmployeeStatus
+  cursor?: string
+  limit?: number
+}
+
+export type PaginatedResponse<T> = {
+  items: T[]
+  nextCursor: string | null
+  hasMore: boolean
 }
 
 export type AttendanceStatus = "PRESENT" | "LATE" | "WFH" | "ABSENT"
@@ -126,6 +155,8 @@ export type CreateLeaveRequestInput = {
 export type ListLeaveParams = {
   status?: LeaveStatus
   employeeId?: string
+  cursor?: string
+  limit?: number
 }
 
 export type DashboardStats = {

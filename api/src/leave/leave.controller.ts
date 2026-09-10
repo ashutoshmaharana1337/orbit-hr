@@ -6,6 +6,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
+import { Auditable } from '../audit/auditable.decorator.js';
 import type { JwtPayload } from '../auth/auth.types.js';
 
 @Controller('leave')
@@ -24,18 +25,21 @@ export class LeaveController {
   }
 
   @Post()
+  @Auditable({ entityType: 'LeaveRequest' })
   create(@CurrentUser() user: JwtPayload, @Body() dto: CreateLeaveRequestDto) {
     return this.leave.create(user.tenantId, user.sub, dto);
   }
 
   @Patch(':id/approve')
   @Roles('ADMIN', 'HR', 'MANAGER')
+  @Auditable({ entityType: 'LeaveRequest' })
   approve(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.leave.decide(user.tenantId, id, user, true);
   }
 
   @Patch(':id/reject')
   @Roles('ADMIN', 'HR', 'MANAGER')
+  @Auditable({ entityType: 'LeaveRequest' })
   reject(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.leave.decide(user.tenantId, id, user, false);
   }
