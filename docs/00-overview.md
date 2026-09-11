@@ -10,16 +10,17 @@ built so far. Read them in order, or jump to what you need:
 5. [05-backend.md](./05-backend.md) — the NestJS/Postgres/Prisma API: architecture, modules, auth, and a Prisma CLI landmine worth reading before you touch it
 6. [06-auth.md](./06-auth.md) — real login wired to the backend, department landing pages, and which parts of the app still run on mock data vs. the real API
 7. [07-production-hardening.md](./07-production-hardening.md) — the production-readiness review's findings and the security/session/timezone work done against it (git+CI, tenant-isolation fixes, httpOnly cookies, rate limiting, invite/reset, tenant timezones)
-8. [CHANGELOG.md](./CHANGELOG.md) — chronological log of every change, session by session
+8. [08-frontend-live-data.md](./08-frontend-live-data.md) — phase 2: replacing mock data with the real API, screen by screen (TanStack Query, all screens now wired)
+9. [CHANGELOG.md](./CHANGELOG.md) — chronological log of every change, session by session
 
 ## Current state
 
 - **Frontend**: `web/` — Next.js 16 app with 4 working screens (Dashboard,
   Employees, Attendance, Leave) plus real **login** and **department
-  landing pages** now wired to the live backend. The screens themselves
-  still read from mock in-memory data (`src/lib/mock-data.ts`) — auth is
-  the first (and so far only) part of `web/` talking to the real API. See
-  [06-auth.md](./06-auth.md).
+  landing pages**, all now wired to the live backend via TanStack Query.
+  The **Employees**, **Attendance**, **Leave**, and **Dashboard** screens
+  all fetch real data from the API. `src/lib/mock-data.ts` is deleted — no
+  mock data remains in the codebase — see [08-frontend-live-data.md](./08-frontend-live-data.md).
 - **Backend**: `api/` — NestJS 12 + PostgreSQL + Prisma, tenant isolation
   enforced at **both** the application layer (every query scoped by
   `tenantId`) and the database layer (Postgres row-level security via a
@@ -36,12 +37,16 @@ built so far. Read them in order, or jump to what you need:
   Postgres runs via `docker-compose.yml` at the repo root, and the app now
   has a real git history and CI pipeline
   ([07-production-hardening.md](./07-production-hardening.md)) instead of
-  living only on a synced desktop.
-- **Not yet done**: connecting the Employees/Attendance/Leave *screens* to
-  the real API (they're still mock data even though login is real), and
-  branch protection on `master`. Full lists in
-  [07-production-hardening.md](./07-production-hardening.md#not-yet-done)
-  and [06-auth.md](./06-auth.md#known-seams-by-design-not-bugs).
+  living only on a synced desktop. The dashboard also includes two new
+  aggregate endpoints: `GET /dashboard/stats` (tenant-scoped summary metrics)
+  and `GET /attendance/trend?days=7` (historical attendance data for charts).
+- **Phase 2 complete**: All frontend screens (Employees, Attendance, Leave, Dashboard)
+  wired to the real API, mock data removed, production build successful.
+- **Phase 3 complete**: Data model expanded with Department, LeavePolicy, and LeaveBalance
+  tables. Audit logging on all writes, soft delete for employee offboarding, and cursor-based
+  pagination on all list endpoints. 28 new API endpoints fully implemented. Frontend types
+  and hooks ready for integration. Full detail in [08-frontend-live-data.md](./08-frontend-live-data.md)
+  and [CHANGELOG.md](./CHANGELOG.md).
 
 ## Stack decisions made so far
 

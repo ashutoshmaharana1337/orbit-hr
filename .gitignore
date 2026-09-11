@@ -8,3 +8,10 @@ Thumbs.db
 
 # claude code local state
 .claude/settings.local.json
+
+# Environment variables - NEVER commit .env files with secrets
+.env
+.env.local
+.env.*.local
+.env.staging
+.env.production

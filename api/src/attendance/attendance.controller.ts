@@ -1,10 +1,12 @@
-import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { AttendanceService } from './attendance.service.js';
 import { UpsertAttendanceDto } from './dto/upsert-attendance.dto.js';
+import { AttendanceTrendQuery } from './dto/attendance-trend.query.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
+import { Auditable } from '../audit/auditable.decorator.js';
 import type { JwtPayload } from '../auth/auth.types.js';
 
 @Controller('attendance')
@@ -22,18 +24,26 @@ export class AttendanceController {
     return this.attendance.summary(user.tenantId);
   }
 
+  @Get('trend')
+  trend(@CurrentUser() user: JwtPayload, @Query() query: AttendanceTrendQuery) {
+    return this.attendance.trend(user.tenantId, query.days ?? 7);
+  }
+
   @Post('clock-in')
+  @Auditable({ entityType: 'AttendanceRecord' })
   clockIn(@CurrentUser() user: JwtPayload) {
     return this.attendance.clockIn(user.tenantId, user.sub);
   }
 
   @Patch('clock-out')
+  @Auditable({ entityType: 'AttendanceRecord' })
   clockOut(@CurrentUser() user: JwtPayload) {
     return this.attendance.clockOut(user.tenantId, user.sub);
   }
 
   @Post()
   @Roles('ADMIN', 'HR', 'MANAGER')
+  @Auditable({ entityType: 'AttendanceRecord' })
   upsert(@CurrentUser() user: JwtPayload, @Body() dto: UpsertAttendanceDto) {
     return this.attendance.upsert(user.tenantId, dto);
   }

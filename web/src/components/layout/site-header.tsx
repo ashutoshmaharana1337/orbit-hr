@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { useAuth } from "@/lib/auth-context"
-import { initials } from "@/lib/mock-data"
+import { initials } from "@/lib/utils"
 
 export function SiteHeader({ title }: { title: string }) {
   const { user, employee, logout } = useAuth()

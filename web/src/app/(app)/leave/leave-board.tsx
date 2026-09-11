@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import { Check, Plus, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -26,7 +26,7 @@ import {
 import { PersonAvatar } from "@/components/person-avatar"
 import { StatusIndicator } from "@/components/status-indicator"
 import { Tag } from "@/components/tag"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Table,
   TableBody,
@@ -35,22 +35,108 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { getEmployee, initials, leaveRequests as initialRequests, type LeaveRequest, type LeaveStatus } from "@/lib/mock-data"
+import { initials } from "@/lib/utils"
 import { leaveTypeColor } from "@/lib/colors"
-import { leaveStatusMeta } from "@/lib/status"
+import { apiLeaveStatusMeta } from "@/lib/status"
+import { LEAVE_TYPE_LABEL } from "@/lib/leave"
+import { ApiError } from "@/lib/api-client"
+import { useAuth } from "@/lib/auth-context"
+import {
+  useApproveLeave,
+  useCreateLeaveRequest,
+  useLeaveRequests,
+  useRejectLeave,
+} from "@/hooks/use-leave"
+import type { LeaveRequestListEntry, LeaveStatus, LeaveType } from "@/lib/api/types"
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })
+}
+
+function LeaveActions({ request }: { request: LeaveRequestListEntry }) {
+  const approve = useApproveLeave()
+  const reject = useRejectLeave()
+  const [error, setError] = useState<string | null>(null)
+  const pending = approve.isPending || reject.isPending
+
+  async function onApprove() {
+    setError(null)
+    try {
+      await approve.mutateAsync(request.id)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Couldn't approve. Try again.")
+    }
+  }
+
+  async function onReject() {
+    setError(null)
+    try {
+      await reject.mutateAsync(request.id)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Couldn't reject. Try again.")
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex justify-end gap-1.5">
+        <Button
+          size="icon-sm"
+          variant="outline"
+          disabled={pending}
+          className="text-[#0ca30c] hover:text-[#0ca30c]"
+          onClick={onApprove}
+        >
+          <Check />
+        </Button>
+        <Button
+          size="icon-sm"
+          variant="outline"
+          disabled={pending}
+          className="text-[#d03b3b] hover:text-[#d03b3b]"
+          onClick={onReject}
+        >
+          <X />
+        </Button>
+      </div>
+      {error && <span className="text-xs text-destructive">{error}</span>}
+    </div>
+  )
+}
+
+const EMPTY_FORM = { type: "ANNUAL" as LeaveType, startDate: "", endDate: "", reason: "" }
 
 export function LeaveBoard() {
-  const [requests, setRequests] = useState<LeaveRequest[]>(initialRequests)
-  const [tab, setTab] = useState<"all" | LeaveStatus>("all")
-  const [dialogOpen, setDialogOpen] = useState(false)
+  const { user } = useAuth()
+  const canDecide = user?.role === "ADMIN" || user?.role === "HR" || user?.role === "MANAGER"
 
-  const filtered = useMemo(
-    () => (tab === "all" ? requests : requests.filter((r) => r.status === tab)),
-    [requests, tab]
+  const [tab, setTab] = useState<"all" | LeaveStatus>("all")
+  const { data: requests, isLoading, isError, error } = useLeaveRequests(
+    tab === "all" ? undefined : { status: tab }
   )
 
-  function updateStatus(id: string, status: LeaveStatus) {
-    setRequests((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)))
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [form, setForm] = useState(EMPTY_FORM)
+  const [dialogError, setDialogError] = useState<string | null>(null)
+  const createLeave = useCreateLeaveRequest()
+
+  function onDialogOpenChange(next: boolean) {
+    setDialogOpen(next)
+    if (next) {
+      setForm(EMPTY_FORM)
+      setDialogError(null)
+    }
+  }
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setDialogError(null)
+    try {
+      await createLeave.mutateAsync(form)
+      setDialogOpen(false)
+    } catch (err) {
+      setDialogError(err instanceof ApiError ? err.message : "Couldn't submit request. Try again.")
+    }
   }
 
   return (
@@ -59,58 +145,85 @@ export function LeaveBoard() {
         <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
           <TabsList>
             <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="pending">Pending</TabsTrigger>
-            <TabsTrigger value="approved">Approved</TabsTrigger>
-            <TabsTrigger value="rejected">Rejected</TabsTrigger>
+            <TabsTrigger value="PENDING">Pending</TabsTrigger>
+            <TabsTrigger value="APPROVED">Approved</TabsTrigger>
+            <TabsTrigger value="REJECTED">Rejected</TabsTrigger>
           </TabsList>
         </Tabs>
 
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
           <DialogTrigger render={<Button size="sm" />}>
             <Plus />
             Request leave
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Request leave</DialogTitle>
-              <DialogDescription>
-                Submit a new leave request for approval. This is a demo form — nothing is saved.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="flex flex-col gap-4 py-2">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="leave-type">Leave type</Label>
-                <Select defaultValue="Annual">
-                  <SelectTrigger id="leave-type" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Annual">Annual</SelectItem>
-                    <SelectItem value="Sick">Sick</SelectItem>
-                    <SelectItem value="Work From Home">Work From Home</SelectItem>
-                    <SelectItem value="Unpaid">Unpaid</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={onSubmit}>
+              <DialogHeader>
+                <DialogTitle>Request leave</DialogTitle>
+                <DialogDescription>
+                  Submit a new leave request for your manager to approve.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex flex-col gap-4 py-2">
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="start-date">Start date</Label>
-                  <Input id="start-date" type="date" />
+                  <Label htmlFor="leave-type">Leave type</Label>
+                  <Select
+                    value={form.type}
+                    onValueChange={(v) => setForm((prev) => ({ ...prev, type: v as LeaveType }))}
+                  >
+                    <SelectTrigger id="leave-type" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(Object.keys(LEAVE_TYPE_LABEL) as LeaveType[]).map((type) => (
+                        <SelectItem key={type} value={type}>
+                          {LEAVE_TYPE_LABEL[type]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="start-date">Start date</Label>
+                    <Input
+                      id="start-date"
+                      type="date"
+                      required
+                      value={form.startDate}
+                      onChange={(e) => setForm((prev) => ({ ...prev, startDate: e.target.value }))}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="end-date">End date</Label>
+                    <Input
+                      id="end-date"
+                      type="date"
+                      required
+                      value={form.endDate}
+                      onChange={(e) => setForm((prev) => ({ ...prev, endDate: e.target.value }))}
+                    />
+                  </div>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="end-date">End date</Label>
-                  <Input id="end-date" type="date" />
+                  <Label htmlFor="reason">Reason</Label>
+                  <Input
+                    id="reason"
+                    placeholder="Briefly describe the reason"
+                    required
+                    value={form.reason}
+                    onChange={(e) => setForm((prev) => ({ ...prev, reason: e.target.value }))}
+                  />
                 </div>
+                {dialogError && <p className="text-sm text-destructive">{dialogError}</p>}
               </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="reason">Reason</Label>
-                <Input id="reason" placeholder="Briefly describe the reason" />
-              </div>
-            </div>
-            <DialogFooter>
-              <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
-              <Button onClick={() => setDialogOpen(false)}>Submit request</Button>
-            </DialogFooter>
+              <DialogFooter>
+                <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
+                <Button type="submit" disabled={createLeave.isPending}>
+                  {createLeave.isPending ? "Submitting…" : "Submit request"}
+                </Button>
+              </DialogFooter>
+            </form>
           </DialogContent>
         </Dialog>
       </div>
@@ -128,69 +241,57 @@ export function LeaveBoard() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.map((req) => {
-              const employee = getEmployee(req.employeeId)
-              if (!employee) return null
-              const meta = leaveStatusMeta[req.status]
-              return (
-                <TableRow key={req.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <PersonAvatar
-                        name={employee.name}
-                        initials={initials(employee.name)}
-                        className="size-8"
-                        fallbackClassName="text-xs"
-                      />
-                      <div className="flex flex-col">
-                        <span className="font-medium">{employee.name}</span>
-                        <span className="text-xs text-muted-foreground">{employee.department}</span>
+            {isError && (
+              <TableRow>
+                <TableCell colSpan={6} className="py-8 text-center text-sm text-destructive">
+                  {error instanceof Error ? error.message : "Failed to load leave requests."}
+                </TableCell>
+              </TableRow>
+            )}
+            {!isError &&
+              requests?.items?.map((req) => {
+                const meta = apiLeaveStatusMeta[req.status]
+                const sameDay = formatDate(req.startDate) === formatDate(req.endDate)
+                return (
+                  <TableRow key={req.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <PersonAvatar
+                          name={req.employee.name}
+                          initials={initials(req.employee.name)}
+                          className="size-8"
+                          fallbackClassName="text-xs"
+                        />
+                        <div className="flex flex-col">
+                          <span className="font-medium">{req.employee.name}</span>
+                          <span className="text-xs text-muted-foreground">{req.employee.department}</span>
+                        </div>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Tag color={leaveTypeColor(req.type)}>{req.type}</Tag>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {req.startDate === req.endDate
-                      ? req.startDate
-                      : `${req.startDate} → ${req.endDate}`}{" "}
-                    <span className="text-xs">
-                      ({req.days} day{req.days > 1 ? "s" : ""})
-                    </span>
-                  </TableCell>
-                  <TableCell className="max-w-48 truncate text-muted-foreground">{req.reason}</TableCell>
-                  <TableCell>
-                    <StatusIndicator color={meta.color} label={meta.label} />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {req.status === "pending" ? (
-                      <div className="flex justify-end gap-1.5">
-                        <Button
-                          size="icon-sm"
-                          variant="outline"
-                          className="text-[#0ca30c] hover:text-[#0ca30c]"
-                          onClick={() => updateStatus(req.id, "approved")}
-                        >
-                          <Check />
-                        </Button>
-                        <Button
-                          size="icon-sm"
-                          variant="outline"
-                          className="text-[#d03b3b] hover:text-[#d03b3b]"
-                          onClick={() => updateStatus(req.id, "rejected")}
-                        >
-                          <X />
-                        </Button>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              )
-            })}
-            {filtered.length === 0 && (
+                    </TableCell>
+                    <TableCell>
+                      <Tag color={leaveTypeColor(LEAVE_TYPE_LABEL[req.type])}>{LEAVE_TYPE_LABEL[req.type]}</Tag>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {sameDay ? formatDate(req.startDate) : `${formatDate(req.startDate)} → ${formatDate(req.endDate)}`}{" "}
+                      <span className="text-xs">
+                        ({req.days} day{req.days > 1 ? "s" : ""})
+                      </span>
+                    </TableCell>
+                    <TableCell className="max-w-48 truncate text-muted-foreground">{req.reason}</TableCell>
+                    <TableCell>
+                      <StatusIndicator color={meta.color} label={meta.label} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {canDecide && req.status === "PENDING" ? (
+                        <LeaveActions request={req} />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            {!isError && !isLoading && (requests?.items?.length ?? 0) === 0 && (
               <TableRow>
                 <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
                   No requests in this view.

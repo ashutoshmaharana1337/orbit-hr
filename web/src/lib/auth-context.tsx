@@ -3,10 +3,9 @@
 import * as React from "react"
 
 import { apiFetch } from "@/lib/api-client"
+import type { EmployeeStatus, Role } from "@/lib/api/types"
 
-export type Role = "ADMIN" | "HR" | "MANAGER" | "EMPLOYEE"
-
-export type EmployeeStatus = "ACTIVE" | "ON_LEAVE" | "INACTIVE"
+export type { EmployeeStatus, Role }
 
 export type AuthEmployee = {
   id: string

@@ -1,4 +1,5 @@
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsOptional, IsString, Min, Max, IsNumber, IsUUID } from 'class-validator';
+import { Type } from 'class-transformer';
 import { EmployeeStatus } from '@prisma/client';
 
 export class ListEmployeesQuery {
@@ -7,10 +8,21 @@ export class ListEmployeesQuery {
   search?: string;
 
   @IsOptional()
-  @IsString()
-  department?: string;
+  @IsUUID()
+  departmentId?: string;
 
   @IsOptional()
   @IsEnum(EmployeeStatus)
   status?: EmployeeStatus;
+
+  @IsOptional()
+  @IsString()
+  cursor?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  @Max(100)
+  limit?: number = 20;
 }

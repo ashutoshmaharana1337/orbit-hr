@@ -1,5 +1,7 @@
+"use client"
+
 import Link from "next/link"
-import { notFound } from "next/navigation"
+import { useParams } from "next/navigation"
 import { Briefcase, Building2, CalendarDays, Users } from "lucide-react"
 
 import { SiteHeader } from "@/components/layout/site-header"
@@ -7,27 +9,53 @@ import { PersonAvatar } from "@/components/person-avatar"
 import { StatusIndicator } from "@/components/status-indicator"
 import { buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { departments, employees, initials } from "@/lib/mock-data"
+import { departments } from "@/lib/departments"
 import { departmentColor } from "@/lib/colors"
-import { employeeStatusMeta } from "@/lib/status"
+import { initials } from "@/lib/utils"
+import { apiEmployeeStatusMeta } from "@/lib/status"
+import { useEmployees } from "@/hooks/use-employees"
 
-export function generateStaticParams() {
-  return departments.map((department) => ({ department: department.toLowerCase() }))
-}
+export default function DepartmentLandingPage() {
+  const { department: slug } = useParams<{ department: string }>()
+  const knownDepartment = departments.find((d) => d.toLowerCase() === slug.toLowerCase())
 
-export default async function DepartmentLandingPage(props: PageProps<"/d/[department]">) {
-  const { department: slug } = await props.params
-  const department = departments.find((d) => d.toLowerCase() === slug.toLowerCase())
-  if (!department) notFound()
+  const { data: deptEmployeesResponse, isLoading } = useEmployees({ department: knownDepartment ?? slug })
 
-  const deptEmployees = employees.filter((e) => e.department === department)
-  const onLeave = deptEmployees.filter((e) => e.status === "on-leave").length
-  const leads = deptEmployees.filter((e) => e.manager === null).length
-  const reports = deptEmployees.length - leads
-  const accent = departmentColor(department)
+  if (isLoading) {
+    return (
+      <div className="flex flex-1 flex-col">
+        <SiteHeader title="Department" />
+        <div className="flex flex-1 items-center justify-center p-6 text-sm text-muted-foreground">
+          Loading…
+        </div>
+      </div>
+    )
+  }
+
+  const employeesList = deptEmployeesResponse?.items ?? []
+
+  if (!knownDepartment && employeesList.length === 0) {
+    return (
+      <div className="flex flex-1 flex-col">
+        <SiteHeader title="Department" />
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
+          <p>Department not found.</p>
+          <Link href="/dashboard" className="text-primary hover:underline">
+            Back to dashboard
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  const displayName = knownDepartment ?? employeesList[0]?.department ?? slug
+  const onLeave = employeesList.filter((e) => e.status === "ON_LEAVE").length
+  const leads = employeesList.filter((e) => e.managerId === null).length
+  const reports = employeesList.length - leads
+  const accent = departmentColor(displayName)
 
   const stats = [
-    { label: "Team members", value: deptEmployees.length, icon: Users, color: "var(--cat-1)" },
+    { label: "Team members", value: employeesList.length, icon: Users, color: "var(--cat-1)" },
     { label: "On leave", value: onLeave, icon: CalendarDays, color: "var(--cat-2)" },
     { label: "Team leads", value: leads, icon: Briefcase, color: "var(--cat-3)" },
     { label: "Direct reports", value: reports, icon: Users, color: "var(--cat-6)" },
@@ -35,7 +63,7 @@ export default async function DepartmentLandingPage(props: PageProps<"/d/[depart
 
   return (
     <div className="flex flex-1 flex-col">
-      <SiteHeader title={department} />
+      <SiteHeader title={displayName} />
       <div className="flex flex-1 flex-col gap-4 p-4 md:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
@@ -49,8 +77,8 @@ export default async function DepartmentLandingPage(props: PageProps<"/d/[depart
               <Building2 className="size-5" />
             </div>
             <div className="flex flex-col gap-1">
-              <h2 className="text-2xl font-semibold tracking-tight">{department}</h2>
-              <p className="text-sm text-muted-foreground">{department} team overview</p>
+              <h2 className="text-2xl font-semibold tracking-tight">{displayName}</h2>
+              <p className="text-sm text-muted-foreground">{displayName} team overview</p>
             </div>
           </div>
           <Link href="/dashboard" className={buttonVariants({ variant: "default" })}>
@@ -84,13 +112,13 @@ export default async function DepartmentLandingPage(props: PageProps<"/d/[depart
           <CardHeader>
             <CardTitle>Team</CardTitle>
             <CardDescription>
-              Everyone in {department}, {deptEmployees.length} member{deptEmployees.length === 1 ? "" : "s"}
+              Everyone in {displayName}, {employeesList.length} member{employeesList.length === 1 ? "" : "s"}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {deptEmployees.map((employee) => {
-                const meta = employeeStatusMeta[employee.status]
+              {employeesList.map((employee) => {
+                const meta = apiEmployeeStatusMeta[employee.status]
                 return (
                   <Link
                     key={employee.id}
@@ -111,7 +139,7 @@ export default async function DepartmentLandingPage(props: PageProps<"/d/[depart
                   </Link>
                 )
               })}
-              {deptEmployees.length === 0 && (
+              {employeesList.length === 0 && (
                 <p className="text-sm text-muted-foreground">No employees in this department yet.</p>
               )}
             </div>
