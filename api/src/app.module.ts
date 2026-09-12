@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
@@ -18,6 +18,8 @@ import { AuditModule } from './audit/audit.module.js';
 import { AuditInterceptor } from './audit/audit.interceptor.js';
 import { LeavePolicesModule } from './leave-policies/leave-policies.module.js';
 import { LeaveBalancesModule } from './leave-balances/leave-balances.module.js';
+import { CommonModule } from './common/common.module.js';
+import { RequestContextMiddleware } from './common/request-context.middleware.js';
 
 @Module({
   imports: [
@@ -30,6 +32,7 @@ import { LeaveBalancesModule } from './leave-balances/leave-balances.module.js';
       throttlers: [{ name: 'default', ttl: 60_000, limit: 120 }],
       skipIf: () => process.env.NODE_ENV === 'test',
     }),
+    CommonModule,
     PrismaModule,
     AuthModule,
     EmployeesModule,
@@ -52,4 +55,10 @@ import { LeaveBalancesModule } from './leave-balances/leave-balances.module.js';
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    // Register request context middleware for all routes
+    // This should be early in the chain to capture request context
+    consumer.apply(RequestContextMiddleware).forRoutes('*');
+  }
+}

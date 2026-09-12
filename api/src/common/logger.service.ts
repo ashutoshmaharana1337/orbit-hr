@@ -13,7 +13,8 @@
  *   this.logger.info('User login', { userId: user.id, tenantId: req.tenantId })
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { LogShipperService } from './log-shipper.service.js';
 
 export interface LogContext {
   requestId?: string;
@@ -36,6 +37,10 @@ export interface LogEntry extends LogContext {
 export class LoggerService extends Logger {
   private context: LogContext = {};
 
+  constructor(@Optional() private readonly logShipper?: LogShipperService) {
+    super();
+  }
+
   setContext(context: Partial<LogContext>) {
     this.context = { ...this.context, ...context };
   }
@@ -57,18 +62,30 @@ export class LoggerService extends Logger {
   debug(message: string, extra?: LogContext) {
     const entry = this.formatLog(message, 'debug', extra);
     console.log(JSON.stringify(entry));
+    // Ship log to aggregation service if available
+    if (this.logShipper) {
+      this.logShipper.queueLog(entry);
+    }
     super.debug(message);
   }
 
   info(message: string, extra?: LogContext) {
     const entry = this.formatLog(message, 'info', extra);
     console.log(JSON.stringify(entry));
+    // Ship log to aggregation service if available
+    if (this.logShipper) {
+      this.logShipper.queueLog(entry);
+    }
     super.log(message);
   }
 
   warn(message: string, extra?: LogContext) {
     const entry = this.formatLog(message, 'warn', extra);
     console.warn(JSON.stringify(entry));
+    // Ship log to aggregation service if available
+    if (this.logShipper) {
+      this.logShipper.queueLog(entry);
+    }
     super.warn(message);
   }
 
@@ -78,6 +95,22 @@ export class LoggerService extends Logger {
       entry['stack'] = trace;
     }
     console.error(JSON.stringify(entry));
+    // Ship log to aggregation service if available
+    if (this.logShipper) {
+      this.logShipper.queueLog(entry);
+    }
     super.error(message, trace);
+  }
+
+  async logSystemEvent(event: { action: string; details?: Record<string, any> }) {
+    const entry = this.formatLog(`System: ${event.action}`, 'info', {
+      action: event.action,
+      ...event.details,
+    });
+    console.log(JSON.stringify(entry));
+    // Ship log to aggregation service if available
+    if (this.logShipper) {
+      this.logShipper.queueLog(entry);
+    }
   }
 }
