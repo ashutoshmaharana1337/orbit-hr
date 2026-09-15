@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
@@ -11,10 +11,21 @@ import { EmployeesModule } from './employees/employees.module.js';
 import { AttendanceModule } from './attendance/attendance.module.js';
 import { LeaveModule } from './leave/leave.module.js';
 import { TenantModule } from './tenant/tenant.module.js';
+import { DashboardModule } from './dashboard/dashboard.module.js';
+import { DepartmentsModule } from './departments/departments.module.js';
+import { DebugModule } from './debug/debug.module.js';
+import { AuditModule } from './audit/audit.module.js';
+import { AuditInterceptor } from './audit/audit.interceptor.js';
+import { LeavePolicesModule } from './leave-policies/leave-policies.module.js';
+import { LeaveBalancesModule } from './leave-balances/leave-balances.module.js';
+import { CommonModule } from './common/common.module.js';
+import { RequestContextMiddleware } from './common/request-context.middleware.js';
+import { OriginCheckMiddleware } from './common/origin-check.middleware.js';
+import { validateEnv } from './common/env.validation.js';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     ThrottlerModule.forRoot({
       // A generous default so normal use of the app is never throttled;
       // auth endpoints override this with a much tighter limit (see
@@ -23,18 +34,33 @@ import { TenantModule } from './tenant/tenant.module.js';
       throttlers: [{ name: 'default', ttl: 60_000, limit: 120 }],
       skipIf: () => process.env.NODE_ENV === 'test',
     }),
+    CommonModule,
     PrismaModule,
     AuthModule,
     EmployeesModule,
     AttendanceModule,
     LeaveModule,
+    LeavePolicesModule,
+    LeaveBalancesModule,
+    DashboardModule,
+    DepartmentsModule,
     TenantModule,
+    AuditModule,
+    // Dev-only request log viewer — never registered in production.
+    ...(process.env.NODE_ENV === 'production' ? [] : [DebugModule]),
   ],
   controllers: [AppController],
   providers: [
     AppService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_INTERCEPTOR, useClass: TenantTransactionInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    // Origin check first (CSRF defense for the cookie session), then request
+    // context so every later log line carries the request id.
+    consumer.apply(OriginCheckMiddleware, RequestContextMiddleware).forRoutes('*');
+  }
+}

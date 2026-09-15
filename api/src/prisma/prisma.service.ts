@@ -58,6 +58,19 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get passwordSetToken() {
     return this.active.passwordSetToken;
   }
+  get department() {
+    return this.active.department;
+  }
+  get leavePolicy() {
+    return this.active.leavePolicy;
+  }
+  get auditLog() {
+    return this.active.auditLog;
+  }
+
+  $queryRaw<T = unknown>(query: TemplateStringsArray, ...values: unknown[]) {
+    return this.active.$queryRaw<T>(query, ...values);
+  }
 
   $executeRaw(query: TemplateStringsArray, ...values: unknown[]) {
     return this.active.$executeRaw(query, ...values);

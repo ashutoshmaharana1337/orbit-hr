@@ -8,10 +8,9 @@ management — built from scratch on Next.js and NestJS.
 ## What's here
 
 - **`web/`** — Next.js 16 frontend. Dashboard, Employees, Attendance, and
-  Leave screens, plus real login and per-department landing pages wired to
-  the live API. (The four main screens themselves still read from mock
-  data — see [docs/00-overview.md](docs/00-overview.md) for exactly what's
-  real vs. mock today.)
+  Leave screens, all wired to the live API. Real login, per-department landing
+  pages, and all four main screens fetch live data via TanStack Query. Mock
+  data completely removed — see [docs/08-frontend-live-data.md](docs/08-frontend-live-data.md).
 - **`api/`** — NestJS 12 + PostgreSQL + Prisma backend. Multi-tenant, with
   tenant isolation enforced at *both* the application layer (every query
   scoped by `tenantId`) and the database layer (Postgres row-level
@@ -21,7 +20,8 @@ management — built from scratch on Next.js and NestJS.
 
 ## Quick start
 
-Prerequisites: Node 22 (see `.nvmrc`), Docker.
+Prerequisites: Node 22 (see `.nvmrc`), Docker. Docker Desktop must be running
+before `docker compose up` (Postgres runs in a container).
 
 ```bash
 # Postgres
@@ -60,6 +60,35 @@ RLS policies; it's never used at runtime. See
 [docs/07-production-hardening.md](docs/07-production-hardening.md#high-postgres-row-level-security)
 for the full reasoning.
 
+The RLS migration creates the `orbit_app` role with a fixed development
+password (`orbit_app_dev_password`, the value in `api/.env.example`). That
+migration has already been applied and must not be edited, so **in any new
+environment, rotate the password right after the first `prisma migrate
+deploy`** using `scripts/rotate-db-app-password.sh` (also useful for
+periodic rotation later — it's a plain `ALTER ROLE`, not a schema change,
+so it's safe to run any number of times):
+
+```bash
+DIRECT_DATABASE_URL="postgresql://orbit:<owner-password>@<host>:5432/orbit_hr?schema=public" \
+  scripts/rotate-db-app-password.sh
+```
+
+It prints the new `DATABASE_URL` on stdout — store it in the environment's
+secret manager (`flyctl secrets set` for the API) and redeploy; existing
+connections keep working on the old password until the app restarts and
+opens new ones, so rotating and redeploying should happen close together.
+
+### Deploying
+
+The API deploys to Fly.io from `api/fly.toml` via
+`scripts/deploy-production.sh` (`release_command` runs
+`prisma migrate deploy` before the new release goes live); the
+`Deploy` GitHub workflow calls the same script for staging and production.
+The web app deploys through the Vercel Git integration — set
+`NEXT_PUBLIC_API_URL` (and optionally `NEXT_PUBLIC_SENTRY_DSN`) in the Vercel
+project settings. Both apps also ship Dockerfiles for self-hosting; see
+`docker-compose.staging.yml`.
+
 ## Tech stack
 
 | Layer | Choice |
@@ -92,10 +121,10 @@ Full detail, plus what's *not* done yet, in
 This started from a full tech-lead-style production-readiness review
 ([docs/production-readiness-review.html](docs/production-readiness-review.html))
 that scored the project "Not yet" and laid out a phased roadmap. Phases 0
-(foundations — git, CI) and 1 (security and correctness) are complete.
-Phase 2 onward (wiring the frontend off mock data, completing the data
-model, infra, observability) is still ahead. Current state in full detail:
-[docs/00-overview.md](docs/00-overview.md).
+(foundations — git, CI), 1 (security and correctness), 2 (frontend wired to
+real API), and 3 (data model complete with audit, soft delete, cursor pagination)
+are complete. Phases 4–6 (infrastructure, deployment, observability) are ahead.
+Current state in full detail: [docs/00-overview.md](docs/00-overview.md).
 
 ## Documentation
 

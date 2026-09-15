@@ -69,7 +69,6 @@ describe('Tenant isolation and role visibility (e2e)', () => {
         name: 'New Hire',
         email: `hire-${Date.now()}@example.com`,
         title: 'Engineer',
-        department: 'Engineering',
         location: 'Remote',
         managerId: tenantA.adminEmployeeId,
         joinDate: '2026-01-01',
@@ -88,7 +87,6 @@ describe('Tenant isolation and role visibility (e2e)', () => {
         name: 'Colleague',
         email: `colleague-${Date.now()}@example.com`,
         title: 'Engineer',
-        department: 'Engineering',
         location: 'Remote',
         joinDate: '2026-01-01',
         phone: '1111111111',
@@ -128,11 +126,9 @@ describe('Tenant isolation and role visibility (e2e)', () => {
             name: 'Bystander',
             email: bystanderUser.email,
             title: 'Intern',
-            department: 'Engineering',
             location: 'Remote',
             joinDate: new Date(),
             phone: '',
-            leaveBalance: { create: {} },
           },
         });
 
@@ -152,7 +148,7 @@ describe('Tenant isolation and role visibility (e2e)', () => {
       .expect(200);
 
     expect(
-      (res.body as Array<{ employeeId: string }>).every((r) => r.employeeId === bystanderEmployee.id),
+      (res.body.items as Array<{ employeeId: string }>).every((r) => r.employeeId === bystanderEmployee.id),
     ).toBe(true);
   });
 

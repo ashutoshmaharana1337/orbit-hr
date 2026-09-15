@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { businessDateUTC } from '../src/attendance/business-time.js';
 
 // Seeding is a system-level bootstrap, not simulated user traffic — it
 // needs to write rows for a tenant it creates itself, across every table,
@@ -52,26 +53,82 @@ async function main() {
 
   const passwordHash = await bcrypt.hash('password123', 10);
 
+  // Departments are a first-class table (Phase 3); employees link by id.
+  const departmentIds: Record<string, string> = {};
+  for (const name of departments) {
+    const d = await prisma.department.upsert({
+      where: { tenantId_name: { tenantId: tenant.id, name } },
+      update: {},
+      create: { tenantId: tenant.id, name },
+    });
+    departmentIds[name] = d.id;
+  }
+
+  // Leave policies. LeaveService resolves a policy by name from the leave
+  // type ("Annual Leave" / "Sick Leave"), so those two must exist for
+  // approvals to work. Every seeded employee gets a balance for the current
+  // year under each.
+  const policySeeds = [
+    { name: 'Annual Leave', entitlementDays: 20 },
+    { name: 'Sick Leave', entitlementDays: 10 },
+  ];
+  const policies = [];
+  for (const ps of policySeeds) {
+    policies.push(
+      await prisma.leavePolicy.upsert({
+        where: { tenantId_name: { tenantId: tenant.id, name: ps.name } },
+        update: {},
+        create: { tenantId: tenant.id, name: ps.name, workingDaysPerWeek: 5, publicHolidaysPerYear: 10, entitlementDays: ps.entitlementDays },
+      }),
+    );
+  }
+  const currentYear = new Date().getUTCFullYear();
+
   // Pass 1: create all employees without managerId
   const created: Record<string, string> = {};
   for (const e of employees) {
     const employee = await prisma.employee.upsert({
       where: { tenantId_email: { tenantId: tenant.id, email: e.email } },
-      update: {},
+      // Re-runs keep existing rows but backfill the department link, which
+      // older seeds (pre-Department table) never set.
+      update: { departmentId: departmentIds[e.department] },
       create: {
         tenantId: tenant.id,
         name: e.name,
         email: e.email,
         title: e.title,
-        department: e.department,
+        departmentId: departmentIds[e.department],
         location: e.location,
         status: e.status,
         joinDate: new Date(e.joinDate),
         phone: e.phone,
-        leaveBalance: { create: { annualUsed: Math.floor(Math.random() * 6), sickUsed: Math.floor(Math.random() * 4) } },
       },
     });
     created[e.name] = employee.id;
+
+    for (const policy of policies) {
+      const usedDays = Math.floor(Math.random() * 4);
+      await prisma.leaveBalance.upsert({
+        where: {
+          tenantId_employeeId_leavePolicyId_year: {
+            tenantId: tenant.id,
+            employeeId: employee.id,
+            leavePolicyId: policy.id,
+            year: currentYear,
+          },
+        },
+        update: {},
+        create: {
+          tenantId: tenant.id,
+          employeeId: employee.id,
+          leavePolicyId: policy.id,
+          year: currentYear,
+          entitledDays: policy.entitlementDays,
+          usedDays,
+          balanceDays: policy.entitlementDays - usedDays,
+        },
+      });
+    }
   }
 
   // Pass 2: wire manager relationships
@@ -121,9 +178,30 @@ async function main() {
     await prisma.employee.update({ where: { id: employeeId }, data: { userId: user.id } });
   }
 
-  // Today's attendance for everyone but the on-leave/inactive folks
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // One EMPLOYEE-level login, reporting to a seeded manager — needed to
+  // exercise role-scoped reads (self-only leave/attendance visibility) from
+  // outside the ADMIN/MANAGER logins above.
+  const employeeLogin = { name: 'Diego Ramirez', email: 'diego.ramirez@acme.dev' };
+  {
+    const employeeId = created[employeeLogin.name];
+    const user = await prisma.user.upsert({
+      where: { email: employeeLogin.email },
+      update: {},
+      create: {
+        tenantId: tenant.id,
+        email: employeeLogin.email,
+        passwordHash,
+        role: 'EMPLOYEE',
+      },
+    });
+    await prisma.employee.update({ where: { id: employeeId }, data: { userId: user.id } });
+  }
+
+  // Today's attendance for everyone but the on-leave/inactive folks.
+  // Must match businessDateUTC(tenant.timezone) — the app's own notion of
+  // "today" — not local machine midnight, or seeded rows land on the
+  // wrong calendar date and /attendance/today comes back empty.
+  const today = businessDateUTC(tenant.timezone);
   const statuses: Array<'PRESENT' | 'LATE' | 'WFH'> = ['PRESENT', 'PRESENT', 'WFH', 'PRESENT', 'LATE'];
   let i = 0;
   for (const e of employees) {
@@ -158,6 +236,11 @@ async function main() {
     const start = new Date(l.start);
     const end = new Date(l.end);
     const days = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
+    const existing = await prisma.leaveRequest.findFirst({
+      where: { tenantId: tenant.id, employeeId: created[l.name], startDate: start, type: l.type },
+      select: { id: true },
+    });
+    if (existing) continue;
     await prisma.leaveRequest.create({
       data: {
         tenantId: tenant.id,
@@ -181,6 +264,7 @@ async function main() {
   console.log('  emma.novak@acme.dev    (MANAGER, Sales)');
   console.log('  marcus.lee@acme.dev    (MANAGER, Marketing)');
   console.log('  nadia.petrova@acme.dev (MANAGER, Finance)');
+  console.log('  diego.ramirez@acme.dev (EMPLOYEE, Engineering)');
 }
 
 main()

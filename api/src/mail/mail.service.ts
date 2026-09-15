@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 
 export type SendMailInput = {
   to: string;
@@ -6,18 +6,27 @@ export type SendMailInput = {
   text: string;
 };
 
-// No transactional email provider is configured for this project yet.
-// Set RESEND_API_KEY to send for real; until then, invites and password
-// resets still work end to end — the link just lands in the server log
-// instead of an inbox.
+// Set RESEND_API_KEY to send for real. Without it, invites and password
+// resets still work end to end in development — the link lands in the
+// server log (DEBUG level, since it is a live credential) instead of an
+// inbox. In production that fallback is refused outright: an invite or
+// reset link in a log aggregator is an account takeover waiting to happen.
 @Injectable()
-export class MailService {
+export class MailService implements OnModuleInit {
   private readonly logger = new Logger(MailService.name);
+
+  onModuleInit() {
+    if (process.env.NODE_ENV === 'production' && !process.env.RESEND_API_KEY) {
+      throw new Error(
+        'MailService: RESEND_API_KEY is required in production — refusing to fall back to logging invite/reset links',
+      );
+    }
+  }
 
   async send(input: SendMailInput): Promise<void> {
     const apiKey = process.env.RESEND_API_KEY;
     if (!apiKey) {
-      this.logger.warn(
+      this.logger.debug(
         `DEV EMAIL (no RESEND_API_KEY set, not actually sent)\nTo: ${input.to}\nSubject: ${input.subject}\n\n${input.text}`,
       );
       return;

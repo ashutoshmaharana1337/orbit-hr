@@ -5,6 +5,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import type { Request } from 'express';
 import type { JwtPayload } from './auth.types.js';
 import { ACCESS_TOKEN_COOKIE } from './auth.constants.js';
+import { getRequestContext } from '../common/request-context.js';
 
 function fromCookie(req: Request): string | null {
   return req?.cookies?.[ACCESS_TOKEN_COOKIE] ?? null;
@@ -23,6 +24,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   validate(payload: JwtPayload): JwtPayload {
+    // Middleware set up the request's AsyncLocalStorage store before any
+    // user was known; now that the token is verified, tag the store so every
+    // later log line in this request carries tenant/user fields.
+    const ctx = getRequestContext();
+    if (ctx) {
+      ctx.tenantId = payload.tenantId;
+      ctx.userId = payload.sub;
+      ctx.userRole = payload.role;
+    }
     return payload;
   }
 }

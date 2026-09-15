@@ -77,12 +77,11 @@ export class AuthService {
         name: dto.fullName,
         email: dto.email,
         title: 'Administrator',
-        department: 'People',
+        departmentId: null,
         location: 'Unspecified',
         status: 'ACTIVE',
         joinDate: new Date(),
         phone: '',
-        leaveBalance: { create: {} },
       },
     });
 
@@ -224,7 +223,7 @@ export class AuthService {
       id: user.id,
       email: user.email,
       role: user.role,
-      tenant: { id: user.tenant.id, name: user.tenant.name, slug: user.tenant.slug },
+      tenant: { id: user.tenant.id, name: user.tenant.name, slug: user.tenant.slug, timezone: user.tenant.timezone },
       employee: user.employee,
     };
   }

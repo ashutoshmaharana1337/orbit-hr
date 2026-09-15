@@ -10,7 +10,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart"
-import { attendanceTrend } from "@/lib/mock-data"
+import { useAttendanceTrend } from "@/hooks/use-attendance"
 
 const chartConfig = {
   present: {
@@ -24,9 +24,24 @@ const chartConfig = {
 } satisfies ChartConfig
 
 export function AttendanceTrendChart() {
+  const { data, isLoading, isError } = useAttendanceTrend(7)
+
+  if (isLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">Loading…</div>
+    )
+  }
+  if (isError || !data) {
+    return (
+      <div className="flex h-64 items-center justify-center text-sm text-destructive">
+        Failed to load attendance trend.
+      </div>
+    )
+  }
+
   return (
     <ChartContainer config={chartConfig} className="h-64 w-full">
-      <LineChart data={attendanceTrend} margin={{ left: 0, right: 12, top: 8 }}>
+      <LineChart data={data} margin={{ left: 0, right: 12, top: 8 }}>
         <CartesianGrid vertical={false} stroke="var(--border)" />
         <XAxis
           dataKey="day"

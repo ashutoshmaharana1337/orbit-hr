@@ -27,7 +27,8 @@ import {
 } from "@/components/ui/sidebar"
 import { PersonAvatar } from "@/components/person-avatar"
 import { useAuth } from "@/lib/auth-context"
-import { initials } from "@/lib/mock-data"
+import { useDepartments } from "@/hooks/use-departments"
+import { initials } from "@/lib/utils"
 
 const mainNav = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
@@ -43,8 +44,13 @@ const comingSoonNav = [
 
 export function AppSidebar() {
   const pathname = usePathname()
-  const { employee } = useAuth()
-  const profileHref = employee ? `/d/${employee.department.toLowerCase()}` : "/dashboard"
+  const { user, employee } = useAuth()
+  const tenantName = user?.tenant?.name || "Orbit HR"
+  const { data: departmentsResponse } = useDepartments()
+  const departmentName = employee?.departmentId
+    ? departmentsResponse?.items.find((d) => d.id === employee.departmentId)?.name
+    : undefined
+  const profileHref = departmentName ? `/d/${encodeURIComponent(departmentName.toLowerCase())}` : "/dashboard"
 
   return (
     <Sidebar collapsible="icon">
@@ -57,7 +63,7 @@ export function AppSidebar() {
               </div>
               <div className="flex flex-col gap-0.5 leading-none">
                 <span className="text-base font-semibold tracking-tight">Orbit HR</span>
-                <span className="text-xs text-muted-foreground">Acme Inc.</span>
+                <span className="truncate text-xs text-muted-foreground">{tenantName}</span>
               </div>
             </SidebarMenuButton>
           </SidebarMenuItem>

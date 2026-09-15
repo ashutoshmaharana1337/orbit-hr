@@ -5,13 +5,19 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api"
 // never "access token expired", so retrying them would just loop.
 const NO_REFRESH_RETRY_PATHS = new Set(["/auth/login", "/auth/register", "/auth/refresh", "/auth/logout"])
 
+// Fired on `window` when a 401 could not be recovered by refreshing.
+export const SESSION_EXPIRED_EVENT = "orbit:session-expired"
+
 export class ApiError extends Error {
   status: number
+  /** Individual validation messages (class-validator returns `message: string[]` on 400). */
+  messages: string[]
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, messages?: string[]) {
     super(message)
     this.name = "ApiError"
     this.status = status
+    this.messages = messages ?? [message]
   }
 }
 
@@ -50,20 +56,32 @@ export async function apiFetch<T = unknown>(path: string, options?: RequestInit)
     const refreshed = await refreshSession()
     if (refreshed) {
       res = await rawFetch(path, options)
+    } else if (typeof window !== "undefined") {
+      // The session is gone for good — let AuthProvider clear state and
+      // send the user back to the login page instead of leaving every
+      // query in an error state with a stale `user`.
+      window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT))
     }
   }
 
   if (!res.ok) {
     let message = res.statusText || "Request failed"
+    let messages: string[] | undefined
     try {
       const body = await res.json()
       if (body?.message) {
-        message = Array.isArray(body.message) ? body.message.join(", ") : body.message
+        if (Array.isArray(body.message)) {
+          const list: string[] = body.message.map(String)
+          messages = list
+          message = list.join(", ")
+        } else {
+          message = String(body.message)
+        }
       }
     } catch {
       // response had no JSON body — fall back to statusText
     }
-    throw new ApiError(res.status, message)
+    throw new ApiError(res.status, message, messages)
   }
 
   // Some endpoints (e.g. 204) may have no body.

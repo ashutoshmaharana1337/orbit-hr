@@ -13,6 +13,11 @@ datasource db {
   directUrl = env("DIRECT_DATABASE_URL")
 }
 
+// Authorization roles for users
+// - ADMIN: Full system access
+// - HR: Human Resources management (employees, leave, attendance)
+// - MANAGER: Department management and reporting
+// - EMPLOYEE: Self-service access
 enum UserRole {
   ADMIN
   HR
@@ -20,12 +25,21 @@ enum UserRole {
   EMPLOYEE
 }
 
+// Employee lifecycle status
+// - ACTIVE: Currently employed
+// - ON_LEAVE: Taking approved leave
+// - INACTIVE: Not employed (terminated, resigned, etc.)
 enum EmployeeStatus {
   ACTIVE
   ON_LEAVE
   INACTIVE
 }
 
+// Daily attendance marking status
+// - PRESENT: Normal working day
+// - LATE: Arrived after late cutoff
+// - WFH: Work from home approval
+// - ABSENT: Not marked present
 enum AttendanceStatus {
   PRESENT
   LATE
@@ -33,6 +47,11 @@ enum AttendanceStatus {
   ABSENT
 }
 
+// Types of leave that can be requested
+// - ANNUAL: Vacation/annual leave
+// - SICK: Sick leave
+// - WORK_FROM_HOME: WFH approval requests
+// - UNPAID: Unpaid leave
 enum LeaveType {
   ANNUAL
   SICK
@@ -40,53 +59,101 @@ enum LeaveType {
   UNPAID
 }
 
+// Leave request workflow status
+// - PENDING: Awaiting approval
+// - APPROVED: Approved by manager/HR
+// - REJECTED: Rejected
 enum LeaveStatus {
   PENDING
   APPROVED
   REJECTED
 }
 
+// Token purposes for password operations
+// - INVITE: New user account invitation
+// - RESET: Password reset request
 enum PasswordTokenPurpose {
   INVITE
   RESET
 }
 
-model Tenant {
-  id                String   @id @default(uuid())
-  name              String
-  slug              String   @unique
-  timezone          String   @default("UTC")
-  lateCutoffMinutes Int      @default(600) // minutes since local midnight, e.g. 600 = 10:00
-  createdAt         DateTime @default(now())
-
-  users            User[]
-  employees        Employee[]
-  attendanceRecords AttendanceRecord[]
-  leaveRequests    LeaveRequest[]
+// Audit log action types
+// - CREATE: Entity created
+// - UPDATE: Entity fields updated
+// - DELETE: Entity deleted or soft-deleted
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
 }
 
+// Tenant - Multi-tenant isolation unit
+// Represents a separate organization/company using the HRMS system.
+// All data is scoped to a tenant for isolation and security.
+//
+// Key Features:
+// - Independent organizations can operate on same infrastructure
+// - Row-level security (RLS) enforces tenant isolation at database level
+// - Timezone settings apply to all attendance calculations for tenant
+model Tenant {
+  id                String   @id @default(uuid())
+  name              String                              // Organization name
+  slug              String   @unique                    // URL-friendly identifier
+  timezone          String   @default("UTC")           // IANA timezone (e.g., "America/New_York")
+  lateCutoffMinutes Int      @default(600)             // Minutes after midnight when attendance marked late (600 = 10:00 AM)
+  createdAt         DateTime @default(now())
+
+  // Relationships - all entities scoped to this tenant
+  users             User[]
+  employees         Employee[]
+  departments       Department[]
+  attendanceRecords AttendanceRecord[]
+  leaveRequests     LeaveRequest[]
+  leavePolicies     LeavePolicy[]
+  leaveBalances     LeaveBalance[]
+  auditLogs         AuditLog[]
+}
+
+// User - Authentication and authorization
+// Represents a user account with login credentials and role-based access.
+// Each user is linked to a tenant and optionally an employee record.
+//
+// Key Features:
+// - Email is globally unique (prevents account confusion)
+// - Password stored as bcrypt hash (never plain text)
+// - Role determines system permissions (ADMIN, HR, MANAGER, EMPLOYEE)
+// - Optional employee link allows user to clock in/submit leave
 model User {
   id           String   @id @default(uuid())
-  tenantId     String
-  email        String   @unique
-  passwordHash String
-  role         UserRole @default(EMPLOYEE)
+  tenantId     String                                 // Tenant association
+  email        String   @unique                       // Globally unique login identifier
+  passwordHash String                                 // Bcrypt hash of password
+  role         UserRole @default(EMPLOYEE)           // Role-based access control
   createdAt    DateTime @default(now())
 
+  // Relationships
   tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  employee          Employee?
-  refreshTokens     RefreshToken[]
-  passwordSetTokens PasswordSetToken[]
+  employee          Employee?                          // Optional - only if user can clock in
+  refreshTokens     RefreshToken[]                     // JWT refresh tokens for session management
+  passwordSetTokens PasswordSetToken[]                 // Password reset/invite tokens
 
   @@index([tenantId])
 }
 
+// RefreshToken - JWT refresh token management
+// Stores hashes of JWT refresh tokens for session extension.
+// Allows users to obtain new access tokens without re-entering password.
+//
+// Security:
+// - Only hash is stored (token never stored in plaintext)
+// - Can be revoked to force re-authentication
+// - Expires automatically
 model RefreshToken {
   id        String    @id @default(uuid())
   userId    String
-  tokenHash String    @unique
-  expiresAt DateTime
-  revokedAt DateTime?
+  tokenHash String    @unique                         // SHA256 hash of refresh token
+  expiresAt DateTime                                  // Token expiration time
+  revokedAt DateTime?                                 // Revocation time (null = active)
   createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -94,13 +161,22 @@ model RefreshToken {
   @@index([userId])
 }
 
+// PasswordSetToken - Password reset and account invitation
+// One-time tokens for password reset and new user invitations.
+// Expires after set period and can be used only once.
+//
+// Flow:
+// 1. User receives email with token link
+// 2. User clicks link and sets password
+// 3. Token marked as used (usedAt field set)
+// 4. Subsequent token usage rejected
 model PasswordSetToken {
   id        String               @id @default(uuid())
   userId    String
-  tokenHash String               @unique
-  purpose   PasswordTokenPurpose
-  expiresAt DateTime
-  usedAt    DateTime?
+  tokenHash String               @unique                         // Hash of token sent to email
+  purpose   PasswordTokenPurpose                                 // INVITE or RESET
+  expiresAt DateTime                                  // Token expiration time
+  usedAt    DateTime?                                 // When token was redeemed (null = unused)
   createdAt DateTime             @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -108,82 +184,238 @@ model PasswordSetToken {
   @@index([userId])
 }
 
-model Employee {
-  id         String         @id @default(uuid())
-  tenantId   String
-  userId     String?        @unique
-  name       String
-  email      String
-  title      String
-  department String
-  location   String
-  status     EmployeeStatus @default(ACTIVE)
-  managerId  String?
-  joinDate   DateTime
-  phone      String
-  createdAt  DateTime       @default(now())
-  updatedAt  DateTime       @updatedAt
+// Department - Organizational units
+// Represents departments/teams within a tenant organization.
+// Used to organize employees and manage team-level operations.
+//
+// Key Features:
+// - Scoped per tenant (same department name can exist in different tenants)
+// - Optional description for additional context
+// - Used for filtering, reporting, and access control
+model Department {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String                                 // Department name (e.g., "Engineering", "Sales")
+  description String?                                // Optional description
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  tenant Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user   User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
-  manager   Employee?  @relation("EmployeeManager", fields: [managerId], references: [id], onDelete: SetNull)
-  reports   Employee[] @relation("EmployeeManager")
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employees Employee[]                               // Employees in this department
+
+  @@unique([tenantId, name])                         // Department name unique per tenant
+  @@index([tenantId])
+}
+
+// Employee - Employee records and profiles
+// Represents an employee within the organization.
+// Links to User for authentication and tracks employment details.
+//
+// Key Features:
+// - Optional User link (allows login if user account created)
+// - Soft delete support (deletedAt field) for compliance and recovery
+// - Self-referencing manager relationship for organizational hierarchy
+// - Status tracking through employment lifecycle
+// - Email unique per tenant for notification purposes
+//
+// Note: An employee doesn't require a User account to exist in the system
+// (e.g., contractor without login, or employee record before account creation)
+model Employee {
+  id           String         @id @default(uuid())
+  tenantId     String
+  userId       String?        @unique                         // Optional link to User for login
+  name         String                                         // Employee full name
+  email        String                                         // Employee email (unique per tenant)
+  title        String                                         // Job title/position
+  departmentId String?                                        // Department assignment
+  location     String                                         // Work location
+  status       EmployeeStatus @default(ACTIVE)              // Employment status
+  managerId    String?                                        // Manager's employee ID (for hierarchy)
+  joinDate     DateTime                                       // Employment start date
+  phone        String                                         // Contact number
+  deletedAt    DateTime?                                      // Soft delete timestamp (null = active)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  // Relationships
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user       User?       @relation(fields: [userId], references: [id], onDelete: SetNull)  // Optional user account
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)  // Department assignment
+  manager    Employee?   @relation("EmployeeManager", fields: [managerId], references: [id], onDelete: SetNull)  // Manager
+  reports    Employee[]  @relation("EmployeeManager")  // Direct reports (employees managed by this employee)
 
   attendanceRecords AttendanceRecord[]
   leaveRequests     LeaveRequest[]
-  leaveBalance      LeaveBalance?
+  leaveBalances     LeaveBalance[]
 
-  @@unique([tenantId, email])
+  @@unique([tenantId, email])                         // Email unique per tenant
   @@index([tenantId])
-  @@index([tenantId, department])
+  @@index([tenantId, departmentId])                   // For department queries
+  @@index([tenantId, deletedAt])                      // For filtering active employees
 }
 
+// AttendanceRecord - Daily attendance tracking
+// Records whether an employee was present, late, working from home, or absent.
+// One record per employee per day.
+//
+// Key Features:
+// - Timestamp-based clock in/out for WFH and manual tracking
+// - Auto-calculated hours worked
+// - Date-scoped per employee (prevents duplicate entries)
+// - Status determined at mark time (PRESENT, LATE, WFH, ABSENT)
+// - Used for reporting, leave accrual, and compliance
 model AttendanceRecord {
   id         String           @id @default(uuid())
   tenantId   String
   employeeId String
-  date       DateTime         @db.Date
-  status     AttendanceStatus
-  clockIn    DateTime?
-  clockOut   DateTime?
-  hours      Float            @default(0)
+  date       DateTime         @db.Date                        // Date of attendance (YYYY-MM-DD)
+  status     AttendanceStatus                                 // PRESENT, LATE, WFH, ABSENT
+  clockIn    DateTime?                                        // Clock in timestamp (if tracked)
+  clockOut   DateTime?                                        // Clock out timestamp (if tracked)
+  hours      Float            @default(0)                     // Calculated working hours
   createdAt  DateTime         @default(now())
 
   tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
-  @@unique([employeeId, date])
-  @@index([tenantId, date])
+  @@unique([employeeId, date])                        // One record per employee per day
+  @@index([tenantId, date])                           // For date range queries
 }
 
+// LeaveRequest - Employee leave requests
+// Request for time off (annual, sick, unpaid, etc.)
+// Tracks request workflow from submission to approval/rejection.
+//
+// Key Features:
+// - Supports multiple leave types with different rules
+// - Tracks approver and decision timestamp
+// - Date range for multi-day leaves
+// - Reason/comments for request
+// - Status workflow: PENDING -> APPROVED/REJECTED
+//
+// Note: Approved leaves impact LeaveBalance balanceDays calculation
 model LeaveRequest {
   id         String      @id @default(uuid())
   tenantId   String
   employeeId String
-  type       LeaveType
-  startDate  DateTime    @db.Date
-  endDate    DateTime    @db.Date
-  days       Int
-  status     LeaveStatus @default(PENDING)
-  reason     String
-  appliedOn  DateTime    @default(now())
-  decidedAt  DateTime?
-  decidedBy  String?
+  type       LeaveType                                        // ANNUAL, SICK, WORK_FROM_HOME, UNPAID
+  startDate  DateTime    @db.Date                            // First day of leave
+  endDate    DateTime    @db.Date                            // Last day of leave
+  days       Int                                             // Number of leave days requested
+  status     LeaveStatus @default(PENDING)                  // PENDING, APPROVED, REJECTED
+  reason     String                                          // Leave reason/comments
+  appliedOn  DateTime    @default(now())                    // Request submission timestamp
+  decidedAt  DateTime?                                       // Approval/rejection timestamp
+  decidedBy  String?                                         // User ID of approver
 
   tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
-  @@index([tenantId, status])
-  @@index([employeeId])
+  @@index([tenantId, status])                         // For approval workflow queries
+  @@index([employeeId])                               // For employee leave history
 }
 
-model LeaveBalance {
-  id          String @id @default(uuid())
-  employeeId  String @unique
-  annualUsed  Int    @default(0)
-  annualTotal Int    @default(18)
-  sickUsed    Int    @default(0)
-  sickTotal   Int    @default(10)
+// LeavePolicy - Leave entitlements and rules
+// Configurable leave policies per tenant.
+// Defines how many leave days employees get based on working patterns.
+//
+// Key Features:
+// - Customizable working days per week
+// - Public holidays factored into entitlement
+// - Base entitlement days (annual leaves per year)
+// - Can have multiple policies for different employee groups
+//
+// Example:
+// - Full-time: 5 days/week, 12 public holidays, 21 annual days
+// - Part-time: 3 days/week, 12 public holidays, 12 annual days
+model LeavePolicy {
+  id                    String   @id @default(uuid())
+  tenantId              String
+  name                  String                                 // Policy name (e.g., "Full-Time", "Part-Time")
+  workingDaysPerWeek    Int      @default(5)                  // Days worked per week (typically 5)
+  publicHolidaysPerYear Int      @default(0)                  // Public holidays per year
+  entitlementDays       Int                                    // Annual leave days entitlements
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
-  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  leaveBalances LeaveBalance[]                                 // Balances using this policy
+
+  @@unique([tenantId, name])                          // Policy name unique per tenant
+  @@index([tenantId])
+}
+
+// LeaveBalance - Year-scoped leave balance per policy
+// Tracks available leave days for each employee per policy per year.
+// Used to enforce leave quotas and calculate available balance.
+//
+// Key Features:
+// - Year-scoped (balances reset annually)
+// - Policy-linked (multiple policies possible)
+// - Tracks entitled, used, and balance days
+// - Supports decimal days (half-days)
+//
+// Calculation:
+// balanceDays = entitledDays - usedDays
+model LeaveBalance {
+  id             String   @id @default(uuid())
+  tenantId       String
+  employeeId     String
+  leavePolicyId  String
+  year           Int                                           // Fiscal year (e.g., 2026)
+  entitledDays   Decimal  @db.Decimal(10, 2)                 // Total allowed days
+  usedDays       Decimal  @db.Decimal(10, 2) @default(0)    // Days already used
+  balanceDays    Decimal  @db.Decimal(10, 2)                 // Remaining available days
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee    Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leavePolicy LeavePolicy @relation(fields: [leavePolicyId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, employeeId, leavePolicyId, year])  // One balance per employee per policy per year
+  @@index([tenantId, employeeId])                        // For employee balance queries
+  @@index([tenantId, year])                              // For year-based queries
+}
+
+// AuditLog - Comprehensive change audit trail
+// Records all changes to sensitive entities for compliance and debugging.
+// Enables tracking of "who did what when" for audit and security investigations.
+//
+// Key Features:
+// - Before/after values for UPDATE operations
+// - User and role tracking for accountability
+// - JSON storage for flexible entity representation
+// - Timestamp for forensic analysis
+// - Supports all major entity types (Employee, LeaveRequest, etc.)
+//
+// Example Entry:
+// {
+//   action: "UPDATE",
+//   entityType: "LeaveRequest",
+//   userId: "user-123",
+//   userRole: "HR",
+//   beforeValues: { status: "PENDING" },
+//   afterValues: { status: "APPROVED" },
+//   changeDescription: "Leave request approved by HR Manager"
+// }
+model AuditLog {
+  id                 String      @id @default(uuid())
+  tenantId           String
+  entityType         String                                   // Entity type: "Employee", "LeaveRequest", "AttendanceRecord", etc.
+  entityId           String                                   // UUID of the entity that changed
+  action             AuditAction                              // CREATE, UPDATE, or DELETE
+  userId             String?                                  // User who made the change
+  userRole           String?                                  // User's role at the time of change
+  beforeValues       Json?                                    // Previous values (for UPDATE)
+  afterValues        Json?                                    // New values (for UPDATE, CREATE)
+  changeDescription  String?                                  // Human-readable summary (e.g., "Status changed to APPROVED")
+  timestamp          DateTime    @default(now())             // When change occurred
+  createdAt          DateTime    @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, entityType, entityId])           // For entity change history
+  @@index([tenantId, timestamp])                      // For time-based queries
+  @@index([tenantId, userId])                         // For user action history
 }
