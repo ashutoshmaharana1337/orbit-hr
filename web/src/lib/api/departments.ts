@@ -9,7 +9,7 @@ export type CreateDepartmentInput = {
 export type UpdateDepartmentInput = Partial<CreateDepartmentInput>
 
 export function listDepartments() {
-  return apiFetch<CursorPaginatedResponse<Department>>("/departments")
+  return apiFetch<CursorPaginatedResponse<Department>>("/departments?limit=100")
 }
 
 export function getDepartment(id: string) {

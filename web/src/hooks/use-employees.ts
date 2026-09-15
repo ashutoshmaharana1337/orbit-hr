@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import {
   createEmployee,
@@ -20,16 +20,21 @@ const employeeKeys = {
 }
 
 /**
- * Fetch employees with cursor pagination support.
- * First call with undefined cursor, then use nextCursor from response for subsequent calls.
+ * Fetch employees, following the API's cursor pagination. `data.items` is
+ * every page loaded so far flattened together; call `fetchNextPage()` while
+ * `hasNextPage` to load more. Callers that only need the first page can keep
+ * reading `data.items` as before.
  */
-export function useEmployees(params?: ListEmployeesParams) {
-  return useQuery({
+export function useEmployees(params?: Omit<ListEmployeesParams, "cursor">) {
+  return useInfiniteQuery({
     queryKey: employeeKeys.list(params),
-    queryFn: async () => {
-      const response = await listEmployees(params)
-      return response
-    },
+    queryFn: ({ pageParam }) => listEmployees({ ...params, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    select: (data) => ({
+      items: data.pages.flatMap((page) => page.items) as EmployeeSummary[],
+      hasMore: data.pages.at(-1)?.hasMore ?? false,
+    }),
   })
 }
 

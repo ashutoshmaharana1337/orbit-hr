@@ -17,15 +17,19 @@ import { StatusIndicator } from "@/components/status-indicator"
 import { initials } from "@/lib/utils"
 import { apiAttendanceStatusMeta } from "@/lib/status"
 import { useTodayAttendance } from "@/hooks/use-attendance"
-
-function formatTime(iso: string | null) {
-  if (!iso) return "—"
-  return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
-}
+import { useDepartments } from "@/hooks/use-departments"
+import { useAuth } from "@/lib/auth-context"
+import { formatTime as formatTimeInZone } from "@/lib/format"
 
 export function AttendanceTable() {
   const [query, setQuery] = useState("")
   const { data: records, isLoading, isError, error } = useTodayAttendance()
+  const { user } = useAuth()
+  const tz = user?.tenant?.timezone
+  // Same zone as the clock card above, so a 07:01 clock-in never reads as 12:31 in the table.
+  const formatTime = (iso: string | null) => (iso ? formatTimeInZone(iso, tz) : "—")
+  const { data: departmentsResponse } = useDepartments()
+  const departmentNames = new Map(departmentsResponse?.items.map((d) => [d.id, d.name]) ?? [])
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -78,7 +82,9 @@ export function AttendanceTable() {
                         />
                         <div className="flex flex-col">
                           <span className="font-medium">{employee.name}</span>
-                          <span className="text-xs text-muted-foreground">{employee.department}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {(employee.departmentId && departmentNames.get(employee.departmentId)) ?? "—"}
+                          </span>
                         </div>
                       </div>
                     </TableCell>

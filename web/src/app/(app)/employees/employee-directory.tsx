@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useMemo, useState } from "react"
 import { Search, UserPlus } from "lucide-react"
 
@@ -24,7 +25,7 @@ import {
 import { PersonAvatar } from "@/components/person-avatar"
 import { StatusIndicator } from "@/components/status-indicator"
 import { Tag } from "@/components/tag"
-import { departments } from "@/lib/departments"
+import { useDepartments } from "@/hooks/use-departments"
 import { departmentColor } from "@/lib/colors"
 import { apiEmployeeStatusMeta } from "@/lib/status"
 import { initials } from "@/lib/utils"
@@ -35,13 +36,24 @@ import { EmployeeFormDialog } from "./employee-form-dialog"
 export function EmployeeDirectory() {
   const [query, setQuery] = useState("")
   const [department, setDepartment] = useState<string>("all")
+  const router = useRouter()
   const role = useAuth().user?.role
   const canManageEmployees = role === "ADMIN" || role === "HR"
 
-  const { data: response, isLoading, isError, error } = useEmployees({
+  const {
+    data: response,
+    isLoading,
+    isError,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useEmployees({
     search: query.trim() || undefined,
-    department: department === "all" ? undefined : department,
+    departmentId: department === "all" ? undefined : department,
   })
+  const { data: departmentsResponse } = useDepartments()
+  const departmentNames = new Map(departmentsResponse?.items.map((d) => [d.id, d.name]) ?? [])
 
   const filtered = useMemo(() => response?.items ?? [], [response?.items])
 
@@ -60,20 +72,22 @@ export function EmployeeDirectory() {
         <Select value={department} onValueChange={(v) => setDepartment(v as string)}>
           <SelectTrigger className="h-8 w-44">
             <SelectValue placeholder="Department">
-              {(value: string) => (value === "all" ? "All departments" : value)}
+              {(value: string) => (value === "all" ? "All departments" : (departmentNames.get(value) ?? value))}
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All departments</SelectItem>
-            {departments.map((d) => (
-              <SelectItem key={d} value={d}>
-                {d}
+            {(departmentsResponse?.items ?? []).map((d) => (
+              <SelectItem key={d.id} value={d.id}>
+                {d.name}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
         <span className="text-sm text-muted-foreground">
-          {isLoading ? "Loading…" : `${filtered.length} employee${filtered.length === 1 ? "" : "s"}`}
+          {isLoading
+            ? "Loading…"
+            : `Showing ${filtered.length} employee${filtered.length === 1 ? "" : "s"}`}
         </span>
         {canManageEmployees && (
           <EmployeeFormDialog mode="create" triggerRender={<Button size="sm" className="ml-auto" />}>
@@ -106,7 +120,16 @@ export function EmployeeDirectory() {
               filtered.map((employee) => {
                 const meta = apiEmployeeStatusMeta[employee.status]
                 return (
-                  <TableRow key={employee.id} className="cursor-pointer">
+                  <TableRow
+                    key={employee.id}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={(e) => {
+                      // The name link handles its own click (and keyboard
+                      // access); only push for clicks elsewhere on the row.
+                      if ((e.target as HTMLElement).closest("a")) return
+                      router.push(`/employees/${employee.id}`)
+                    }}
+                  >
                     <TableCell>
                       <Link href={`/employees/${employee.id}`} className="flex items-center gap-3">
                         <PersonAvatar
@@ -122,7 +145,16 @@ export function EmployeeDirectory() {
                       </Link>
                     </TableCell>
                     <TableCell>
-                      <Tag color={departmentColor(employee.department)}>{employee.department}</Tag>
+                      {(() => {
+                        const departmentName =
+                          employee.department?.name ??
+                          (employee.departmentId ? departmentNames.get(employee.departmentId) : undefined)
+                        return departmentName ? (
+                          <Tag color={departmentColor(departmentName)}>{departmentName}</Tag>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )
+                      })()}
                     </TableCell>
                     <TableCell className="text-muted-foreground">{employee.location ?? "—"}</TableCell>
                     <TableCell className="text-muted-foreground">{employee.manager?.name ?? "—"}</TableCell>
@@ -142,6 +174,19 @@ export function EmployeeDirectory() {
           </TableBody>
         </Table>
       </div>
+
+      {hasNextPage && (
+        <div className="flex justify-center">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fetchNextPage()}
+            disabled={isFetchingNextPage}
+          >
+            {isFetchingNextPage ? "Loading…" : "Load more"}
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

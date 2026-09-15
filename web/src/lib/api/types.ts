@@ -37,7 +37,7 @@ export type EmployeeSummary = {
   id: string
   name: string
   title: string
-  departmentId?: string
+  departmentId: string | null
   department?: { id: string; name: string } | null
   status: EmployeeStatus
   managerId: string | null
@@ -66,7 +66,7 @@ export type CreateEmployeeInput = {
   name: string
   email: string
   title: string
-  department: string
+  departmentId?: string | null
   location: string
   status?: EmployeeStatus
   managerId?: string
@@ -78,7 +78,7 @@ export type UpdateEmployeeInput = Partial<CreateEmployeeInput>
 
 export type ListEmployeesParams = {
   search?: string
-  department?: string
+  departmentId?: string
   status?: EmployeeStatus
   cursor?: string
   limit?: number
@@ -95,7 +95,7 @@ export type AttendanceRecord = {
   clockIn: string | null
   clockOut: string | null
   hours: number
-  employee: { id: string; name: string; department: string }
+  employee: { id: string; name: string; departmentId: string | null }
 }
 
 export type AttendanceSummaryEntry = {
@@ -127,17 +127,38 @@ export type LeaveRequestRecord = {
 
 // What GET /leave returns per row — same fields, plus the joined employee.
 export type LeaveRequestListEntry = LeaveRequestRecord & {
-  employee: { id: string; name: string; department: string }
+  employee: { id: string; name: string; departmentId: string | null }
 }
 
+// One row per leave policy, as returned by GET /leave/balance/:employeeId.
 export type LeaveBalance = {
-  id: string
-  employeeId: string
-  annualUsed: number
-  annualTotal: number
-  sickUsed: number
-  sickTotal: number
+  policy: { id: string; name: string }
+  year: number
+  entitledDays: number
+  usedDays: number
+  balanceDays: number
 }
+
+// Raw wire shape: numbers may arrive as strings (Prisma Decimal), and older
+// API builds return a single aggregate object instead of the array.
+export type LeaveBalanceWire = {
+  policy?: { id?: string; name?: string } | null
+  year: number | string
+  entitledDays: number | string
+  usedDays: number | string
+  balanceDays: number | string
+}
+
+export type LegacyLeaveBalance = {
+  id?: string
+  employeeId?: string
+  annualUsed: number | string
+  annualTotal: number | string
+  sickUsed: number | string
+  sickTotal: number | string
+}
+
+export type LeaveBalanceResponse = LeaveBalanceWire[] | LegacyLeaveBalance
 
 export type CreateLeaveRequestInput = {
   type: LeaveType
@@ -158,7 +179,7 @@ export type DashboardStats = {
   onLeaveToday: number
   pendingLeaveRequests: number
   attendanceRate: number
-  headcountByDepartment: { department: string; count: number }[]
+  headcountByDepartment: { departmentId: string | null; count: number }[]
 }
 
 export type ListDepartmentsParams = {

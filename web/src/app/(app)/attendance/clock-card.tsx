@@ -9,14 +9,13 @@ import { StatusIndicator } from "@/components/status-indicator"
 import { ApiError } from "@/lib/api-client"
 import { apiAttendanceStatusMeta } from "@/lib/status"
 import { useAuth } from "@/lib/auth-context"
+import { formatTime as formatTimeInZone } from "@/lib/format"
 import { useClockIn, useClockOut, useTodayAttendance } from "@/hooks/use-attendance"
 
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
-}
-
 export function ClockCard() {
-  const { employee } = useAuth()
+  const { user, employee } = useAuth()
+  const tz = user?.tenant?.timezone
+  const formatTime = (iso: string) => formatTimeInZone(iso, tz)
   const { data: today, isLoading } = useTodayAttendance()
   const clockIn = useClockIn()
   const clockOut = useClockOut()

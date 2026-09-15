@@ -6,16 +6,37 @@ import { ArrowUpRight, CalendarDays, TrendingUp, Users } from "lucide-react"
 import { SiteHeader } from "@/components/layout/site-header"
 import { buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
 import { PersonAvatar } from "@/components/person-avatar"
 import { Tag } from "@/components/tag"
 import { statusColors } from "@/lib/status"
 import { initials } from "@/lib/utils"
 import { LEAVE_TYPE_LABEL } from "@/lib/leave"
+import { formatDate } from "@/lib/format"
 import { useAuth } from "@/lib/auth-context"
 import { useDashboardStats } from "@/hooks/use-dashboard"
 import { useLeaveRequests } from "@/hooks/use-leave"
 import { AttendanceTrendChart } from "./attendance-trend-chart"
 import { DepartmentChart } from "./department-chart"
+
+function greetingForHour(hour: number) {
+  if (hour < 12) return "Good morning"
+  if (hour < 18) return "Good afternoon"
+  return "Good evening"
+}
+
+// Hour of day in the tenant's zone when we know it, else the browser's.
+function currentHour(tz?: string) {
+  if (tz) {
+    try {
+      const hour = new Intl.DateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", timeZone: tz }).format(new Date())
+      return Number(hour)
+    } catch {
+      // unknown zone — fall through to the browser clock
+    }
+  }
+  return new Date().getHours()
+}
 
 export default function DashboardPage() {
   const { user } = useAuth()
@@ -23,7 +44,9 @@ export default function DashboardPage() {
   const { data: pendingLeave, isLoading: pendingLoading } = useLeaveRequests({ status: "PENDING" })
 
   const firstName = user?.employee?.name.split(" ")[0] ?? user?.email ?? ""
-  const today = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })
+  const tz = user?.tenant?.timezone
+  const today = formatDate(new Date(), tz)
+  const greeting = greetingForHour(currentHour(tz))
 
   const statCards = stats && [
     { label: "Total employees", value: stats.totalEmployees, icon: Users, color: "var(--cat-1)" },
@@ -42,7 +65,7 @@ export default function DashboardPage() {
       <SiteHeader title="Dashboard" />
       <div className="flex flex-1 flex-col gap-4 p-4 md:p-6">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight">Good morning, {firstName}</h2>
+          <h2 className="text-2xl font-semibold tracking-tight">{greeting}, {firstName}</h2>
           <p className="text-sm text-muted-foreground">
             Here&apos;s what&apos;s happening across the org today, {today}.
           </p>
@@ -51,8 +74,15 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {statsLoading || !statCards
             ? Array.from({ length: 3 }).map((_, i) => (
-                <Card key={i}>
-                  <CardContent className="p-4 text-sm text-muted-foreground">Loading…</CardContent>
+                <Card key={i} aria-busy="true">
+                  <CardContent className="flex items-start justify-between p-4">
+                    <div className="flex flex-col gap-2">
+                      <Skeleton className="h-4 w-28" />
+                      <Skeleton className="h-8 w-16" />
+                      <Skeleton className="h-3 w-24" />
+                    </div>
+                    <Skeleton className="size-8 rounded-lg" />
+                  </CardContent>
                 </Card>
               ))
             : statCards.map((stat) => (
@@ -117,7 +147,17 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="flex flex-col gap-3">
-                {pendingLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
+                {pendingLoading &&
+                  Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-3" aria-busy="true">
+                      <Skeleton className="size-7 rounded-full" />
+                      <div className="flex flex-1 flex-col gap-1.5">
+                        <Skeleton className="h-4 w-40" />
+                        <Skeleton className="h-3 w-24" />
+                      </div>
+                      <Skeleton className="h-5 w-16" />
+                    </div>
+                  ))}
                 {!pendingLoading &&
                   pendingLeave?.items?.slice(0, 4).map((req) => (
                     <div key={req.id} className="flex items-center gap-3">

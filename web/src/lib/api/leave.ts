@@ -3,6 +3,7 @@ import type {
   CreateLeaveRequestInput,
   CursorPaginatedResponse,
   LeaveBalance,
+  LeaveBalanceResponse,
   LeaveRequestListEntry,
   LeaveRequestRecord,
   ListLeaveParams,
@@ -24,7 +25,35 @@ export function listLeaveRequests(params?: ListLeaveParams) {
 }
 
 export function getLeaveBalance(employeeId: string) {
-  return apiFetch<LeaveBalance>(`/leave/balance/${employeeId}`)
+  return apiFetch<LeaveBalanceResponse>(`/leave/balance/${employeeId}`)
+}
+
+/**
+ * The balance endpoint is moving from a single `{ annualUsed, annualTotal,
+ * sickUsed, sickTotal }` object to one entry per leave policy. Accept both
+ * and always hand callers the per-policy array. Numbers come from Prisma
+ * Decimal columns and may be serialised as strings, so coerce them.
+ */
+export function normalizeLeaveBalances(data: LeaveBalanceResponse | null | undefined): LeaveBalance[] {
+  if (!data) return []
+  if (Array.isArray(data)) {
+    return data.map((b) => ({
+      policy: { id: String(b.policy?.id ?? ""), name: String(b.policy?.name ?? "Leave") },
+      year: Number(b.year),
+      entitledDays: Number(b.entitledDays) || 0,
+      usedDays: Number(b.usedDays) || 0,
+      balanceDays: Number(b.balanceDays) || 0,
+    }))
+  }
+  const year = new Date().getFullYear()
+  const annualTotal = Number(data.annualTotal) || 0
+  const annualUsed = Number(data.annualUsed) || 0
+  const sickTotal = Number(data.sickTotal) || 0
+  const sickUsed = Number(data.sickUsed) || 0
+  return [
+    { policy: { id: "annual", name: "Annual leave" }, year, entitledDays: annualTotal, usedDays: annualUsed, balanceDays: annualTotal - annualUsed },
+    { policy: { id: "sick", name: "Sick leave" }, year, entitledDays: sickTotal, usedDays: sickUsed, balanceDays: sickTotal - sickUsed },
+  ]
 }
 
 export function createLeaveRequest(input: CreateLeaveRequestInput) {

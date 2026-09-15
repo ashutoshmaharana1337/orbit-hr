@@ -9,6 +9,7 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart"
 import { useDashboardStats } from "@/hooks/use-dashboard"
+import { useDepartments } from "@/hooks/use-departments"
 
 const chartConfig = {
   count: {
@@ -19,6 +20,7 @@ const chartConfig = {
 
 export function DepartmentChart() {
   const { data: stats, isLoading, isError } = useDashboardStats()
+  const { data: departmentsResponse } = useDepartments()
 
   if (isLoading) {
     return (
@@ -33,10 +35,16 @@ export function DepartmentChart() {
     )
   }
 
+  const departmentNames = new Map(departmentsResponse?.items.map((d) => [d.id, d.name]) ?? [])
+  const chartData = stats.headcountByDepartment.map((row) => ({
+    department: (row.departmentId && departmentNames.get(row.departmentId)) ?? "Unassigned",
+    count: row.count,
+  }))
+
   return (
     <ChartContainer config={chartConfig} className="h-64 w-full">
       <BarChart
-        data={stats.headcountByDepartment}
+        data={chartData}
         layout="vertical"
         margin={{ left: -8, right: 16 }}
       >

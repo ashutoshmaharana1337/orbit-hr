@@ -12,12 +12,14 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { departmentColor } from "@/lib/colors"
+import { formatDate } from "@/lib/format"
 import { apiEmployeeStatusMeta } from "@/lib/status"
 import { initials } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
+import { useDepartments } from "@/hooks/use-departments"
 import { useEmployee } from "@/hooks/use-employees"
+import { useLeaveBalance } from "@/hooks/use-leave"
 import { ApiError } from "@/lib/api-client"
 import { EmployeeFormDialog } from "../employee-form-dialog"
 
@@ -25,6 +27,15 @@ export default function EmployeeProfilePage() {
   const { id } = useParams<{ id: string }>()
   const { user } = useAuth()
   const { data: employee, isLoading, error } = useEmployee(id)
+  // Balances come from /leave/balance/:id (one row per policy). The API
+  // 403s for viewers who may not see them — we just hide the card then.
+  const { data: leaveBalances, isError: balancesError } = useLeaveBalance(id)
+  const { data: departmentsResponse } = useDepartments()
+  const departmentName =
+    employee?.department?.name ??
+    (employee?.departmentId
+      ? departmentsResponse?.items.find((d) => d.id === employee.departmentId)?.name
+      : undefined)
 
   const canManageEmployees = user?.role === "ADMIN" || user?.role === "HR"
 
@@ -83,7 +94,7 @@ export default function EmployeeProfilePage() {
               <div className="flex flex-col gap-1">
                 <h2 className="text-2xl font-semibold tracking-tight">{employee.name}</h2>
                 <p className="text-sm text-muted-foreground">
-                  {employee.title} · {employee.department}
+                  {employee.title} · {departmentName ?? "—"}
                 </p>
                 <StatusIndicator color={statusMeta.color} label={statusMeta.label} className="mt-1" />
               </div>
@@ -121,12 +132,9 @@ export default function EmployeeProfilePage() {
                 {employee.joinDate && (
                   <div className="flex items-center gap-2 text-muted-foreground sm:justify-end">
                     <Calendar className="size-3.5" />
-                    Joined{" "}
-                    {new Date(employee.joinDate).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
+                    {/* joinDate is a calendar date stored at UTC midnight —
+                        format in UTC so it never shifts a day west of Greenwich. */}
+                    Joined {formatDate(employee.joinDate, "UTC", { year: "numeric" })}
                   </div>
                 )}
               </div>
@@ -134,126 +142,98 @@ export default function EmployeeProfilePage() {
           </CardContent>
         </Card>
 
-        <Tabs defaultValue="overview">
-          <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="attendance">Attendance</TabsTrigger>
-            <TabsTrigger value="leave">Leave history</TabsTrigger>
-          </TabsList>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Job details</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Manager</span>
+                <span>{employee.manager?.name ?? "—"}</span>
+              </div>
+              <Separator />
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Department</span>
+                {departmentName ? (
+                  <Tag color={departmentColor(departmentName)}>{departmentName}</Tag>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
+              </div>
+              <Separator />
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Employee ID</span>
+                <span className="font-mono text-xs">{employee.id}</span>
+              </div>
+            </CardContent>
+          </Card>
 
-          <TabsContent value="overview" className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          {!balancesError && leaveBalances && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Job details</CardTitle>
+                <CardTitle className="text-base">Leave balance</CardTitle>
               </CardHeader>
-              <CardContent className="flex flex-col gap-3 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Manager</span>
-                  <span>{employee.manager?.name ?? "—"}</span>
-                </div>
-                <Separator />
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Department</span>
-                  <Tag color={departmentColor(employee.department)}>{employee.department}</Tag>
-                </div>
-                <Separator />
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Employee ID</span>
-                  <span className="font-mono text-xs">{employee.id}</span>
-                </div>
+              <CardContent className="flex flex-col gap-4">
+                {leaveBalances.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No leave policies assigned yet.</p>
+                )}
+                {leaveBalances.map((balance) => {
+                  // entitledDays can be 0 (unallocated policy) — avoid NaN.
+                  const percent =
+                    balance.entitledDays > 0
+                      ? Math.min(100, (balance.usedDays / balance.entitledDays) * 100)
+                      : 0
+                  return (
+                    <div key={balance.policy.id} className="flex flex-col gap-1.5">
+                      <div className="flex items-center justify-between text-sm">
+                        <span>{balance.policy.name}</span>
+                        <span className="text-muted-foreground">
+                          {balance.usedDays} / {balance.entitledDays} days
+                        </span>
+                      </div>
+                      <Progress value={percent} aria-label={`${balance.policy.name} used`} />
+                    </div>
+                  )
+                })}
               </CardContent>
             </Card>
+          )}
 
-            {employee.leaveBalance !== undefined && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Leave balance</CardTitle>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-4">
-                  {employee.leaveBalance && (
-                    <>
-                      <div className="flex flex-col gap-1.5">
-                        <div className="flex items-center justify-between text-sm">
-                          <span>Annual leave</span>
-                          <span className="text-muted-foreground">
-                            {employee.leaveBalance.annualUsed} / {employee.leaveBalance.annualTotal} days
-                          </span>
-                        </div>
-                        <Progress
-                          value={(employee.leaveBalance.annualUsed / employee.leaveBalance.annualTotal) * 100}
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1.5">
-                        <div className="flex items-center justify-between text-sm">
-                          <span>Sick leave</span>
-                          <span className="text-muted-foreground">
-                            {employee.leaveBalance.sickUsed} / {employee.leaveBalance.sickTotal} days
-                          </span>
-                        </div>
-                        <Progress
-                          value={(employee.leaveBalance.sickUsed / employee.leaveBalance.sickTotal) * 100}
-                        />
-                      </div>
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {employee.reports !== undefined && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-1.5 text-base">
-                    <Briefcase className="size-3.5" />
-                    Direct reports ({employee.reports.length})
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-3">
-                  {employee.reports.length === 0 && (
-                    <p className="text-sm text-muted-foreground">No direct reports.</p>
-                  )}
-                  {employee.reports.map((r) => (
-                    <Link
-                      key={r.id}
-                      href={`/employees/${r.id}`}
-                      className="flex items-center gap-2.5 text-sm hover:underline"
-                    >
-                      <PersonAvatar
-                        name={r.name}
-                        initials={initials(r.name)}
-                        className="size-6"
-                        fallbackClassName="text-[10px]"
-                      />
-                      <div className="flex flex-col">
-                        <span className="font-medium leading-tight">{r.name}</span>
-                        <span className="text-xs text-muted-foreground leading-tight">{r.title}</span>
-                      </div>
-                    </Link>
-                  ))}
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
-
-          <TabsContent value="attendance">
+          {employee.reports !== undefined && (
             <Card>
-              <CardContent className="p-6 text-sm text-muted-foreground">
-                Per-employee attendance history isn&apos;t wired to the real API yet — it&apos;s
-                next in the phase 2 rollout. See the Attendance screen for today&apos;s
-                tenant-wide view.
+              <CardHeader>
+                <CardTitle className="flex items-center gap-1.5 text-base">
+                  <Briefcase className="size-3.5" />
+                  Direct reports ({employee.reports.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3">
+                {employee.reports.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No direct reports.</p>
+                )}
+                {employee.reports.map((r) => (
+                  <Link
+                    key={r.id}
+                    href={`/employees/${r.id}`}
+                    className="flex items-center gap-2.5 text-sm hover:underline"
+                  >
+                    <PersonAvatar
+                      name={r.name}
+                      initials={initials(r.name)}
+                      className="size-6"
+                      fallbackClassName="text-[10px]"
+                    />
+                    <div className="flex flex-col">
+                      <span className="font-medium leading-tight">{r.name}</span>
+                      <span className="text-xs text-muted-foreground leading-tight">{r.title}</span>
+                    </div>
+                  </Link>
+                ))}
               </CardContent>
             </Card>
-          </TabsContent>
-
-          <TabsContent value="leave">
-            <Card>
-              <CardContent className="p-6 text-sm text-muted-foreground">
-                Per-employee leave history isn&apos;t wired to the real API yet — it&apos;s next
-                in the phase 2 rollout. See the Leave screen for tenant-wide requests.
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+          )}
+        </div>
       </div>
     </div>
   )

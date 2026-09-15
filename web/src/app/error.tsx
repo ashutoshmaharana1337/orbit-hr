@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
@@ -96,7 +97,7 @@ export default function ErrorBoundary({
             Oops! Something went wrong
           </h1>
           <p className="mt-2 text-sm text-gray-600">
-            We've been notified about this error. Our team will investigate.
+            We&apos;ve been notified about this error. Our team will investigate.
           </p>
 
           {process.env.NODE_ENV === "development" && (
@@ -125,12 +126,12 @@ export default function ErrorBoundary({
             Try again
           </button>
 
-          <a
+          <Link
             href="/"
             className="mt-2 block w-full text-center text-sm text-blue-600 hover:text-blue-700"
           >
             Go home
-          </a>
+          </Link>
         </div>
       </div>
     </div>

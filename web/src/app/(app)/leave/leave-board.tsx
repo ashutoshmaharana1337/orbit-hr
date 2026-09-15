@@ -35,12 +35,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { initials } from "@/lib/utils"
 import { leaveTypeColor } from "@/lib/colors"
+import { formatDate as formatDateInZone } from "@/lib/format"
 import { apiLeaveStatusMeta } from "@/lib/status"
 import { LEAVE_TYPE_LABEL } from "@/lib/leave"
 import { ApiError } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
+import { useDepartments } from "@/hooks/use-departments"
 import {
   useApproveLeave,
   useCreateLeaveRequest,
@@ -49,57 +52,110 @@ import {
 } from "@/hooks/use-leave"
 import type { LeaveRequestListEntry, LeaveStatus, LeaveType } from "@/lib/api/types"
 
+// Leave dates are calendar dates (DATE columns, serialised at UTC midnight),
+// so they must be read in UTC — any other zone can shift them a day.
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })
+  return formatDateInZone(iso, "UTC")
 }
+
+function describeDates(request: LeaveRequestListEntry) {
+  const start = formatDate(request.startDate)
+  const end = formatDate(request.endDate)
+  const range = start === end ? start : `${start} → ${end}`
+  return `${range} (${request.days} day${request.days > 1 ? "s" : ""})`
+}
+
+type Decision = "approve" | "reject"
 
 function LeaveActions({ request }: { request: LeaveRequestListEntry }) {
   const approve = useApproveLeave()
   const reject = useRejectLeave()
   const [error, setError] = useState<string | null>(null)
+  const [confirming, setConfirming] = useState<Decision | null>(null)
   const pending = approve.isPending || reject.isPending
 
-  async function onApprove() {
+  async function onConfirm() {
+    if (!confirming) return
+    const decision = confirming
     setError(null)
     try {
-      await approve.mutateAsync(request.id)
+      await (decision === "approve" ? approve : reject).mutateAsync(request.id)
+      setConfirming(null)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Couldn't approve. Try again.")
-    }
-  }
-
-  async function onReject() {
-    setError(null)
-    try {
-      await reject.mutateAsync(request.id)
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Couldn't reject. Try again.")
+      setConfirming(null)
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : `Couldn't ${decision}. Try again.`
+      )
     }
   }
 
   return (
     <div className="flex flex-col items-end gap-1">
       <div className="flex justify-end gap-1.5">
-        <Button
-          size="icon-sm"
-          variant="outline"
-          disabled={pending}
-          className="text-[#0ca30c] hover:text-[#0ca30c]"
-          onClick={onApprove}
-        >
-          <Check />
-        </Button>
-        <Button
-          size="icon-sm"
-          variant="outline"
-          disabled={pending}
-          className="text-[#d03b3b] hover:text-[#d03b3b]"
-          onClick={onReject}
-        >
-          <X />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                size="icon-sm"
+                variant="outline"
+                disabled={pending}
+                aria-label="Approve request"
+                className="text-[#0ca30c] hover:text-[#0ca30c]"
+                onClick={() => setConfirming("approve")}
+              />
+            }
+          >
+            <Check />
+          </TooltipTrigger>
+          <TooltipContent>Approve request</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                size="icon-sm"
+                variant="outline"
+                disabled={pending}
+                aria-label="Reject request"
+                className="text-[#d03b3b] hover:text-[#d03b3b]"
+                onClick={() => setConfirming("reject")}
+              />
+            }
+          >
+            <X />
+          </TooltipTrigger>
+          <TooltipContent>Reject request</TooltipContent>
+        </Tooltip>
       </div>
       {error && <span className="text-xs text-destructive">{error}</span>}
+
+      <Dialog open={confirming !== null} onOpenChange={(open) => !open && !pending && setConfirming(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              {confirming === "reject" ? "Reject" : "Approve"} leave for {request.employee.name}?
+            </DialogTitle>
+            <DialogDescription>
+              {LEAVE_TYPE_LABEL[request.type]} · {describeDates(request)}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose render={<Button type="button" variant="outline" disabled={pending} />}>
+              Cancel
+            </DialogClose>
+            <Button
+              type="button"
+              variant={confirming === "reject" ? "destructive" : "default"}
+              disabled={pending}
+              onClick={onConfirm}
+            >
+              {pending ? "Saving…" : confirming === "reject" ? "Reject" : "Approve"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -111,14 +167,22 @@ export function LeaveBoard() {
   const canDecide = user?.role === "ADMIN" || user?.role === "HR" || user?.role === "MANAGER"
 
   const [tab, setTab] = useState<"all" | LeaveStatus>("all")
-  const { data: requests, isLoading, isError, error } = useLeaveRequests(
-    tab === "all" ? undefined : { status: tab }
-  )
+  const {
+    data: requests,
+    isLoading,
+    isError,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useLeaveRequests(tab === "all" ? undefined : { status: tab })
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [dialogError, setDialogError] = useState<string | null>(null)
   const createLeave = useCreateLeaveRequest()
+  const { data: departmentsResponse } = useDepartments()
+  const departmentNames = new Map(departmentsResponse?.items.map((d) => [d.id, d.name]) ?? [])
 
   function onDialogOpenChange(next: boolean) {
     setDialogOpen(next)
@@ -264,7 +328,9 @@ export function LeaveBoard() {
                         />
                         <div className="flex flex-col">
                           <span className="font-medium">{req.employee.name}</span>
-                          <span className="text-xs text-muted-foreground">{req.employee.department}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {(req.employee.departmentId && departmentNames.get(req.employee.departmentId)) ?? "—"}
+                          </span>
                         </div>
                       </div>
                     </TableCell>
@@ -301,6 +367,19 @@ export function LeaveBoard() {
           </TableBody>
         </Table>
       </div>
+
+      {hasNextPage && (
+        <div className="flex justify-center">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fetchNextPage()}
+            disabled={isFetchingNextPage}
+          >
+            {isFetchingNextPage ? "Loading…" : "Load more"}
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

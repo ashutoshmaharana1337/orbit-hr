@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Sparkles } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -12,8 +12,19 @@ import { useAuth } from "@/lib/auth-context"
 import { ApiError } from "@/lib/api-client"
 
 export default function LoginPage() {
+  // useSearchParams() needs a Suspense boundary above it for prerendering.
+  return (
+    <React.Suspense fallback={null}>
+      <LoginForm />
+    </React.Suspense>
+  )
+}
+
+function LoginForm() {
   const { login, user, loading } = useAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const sessionExpired = searchParams.get("expired") === "1"
 
   const [email, setEmail] = React.useState("")
   const [password, setPassword] = React.useState("")
@@ -21,8 +32,8 @@ export default function LoginPage() {
   const [error, setError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
-    if (!loading && user?.employee) {
-      router.replace(`/d/${user.employee.department.toLowerCase()}`)
+    if (!loading && user) {
+      router.replace("/dashboard")
     }
   }, [loading, user, router])
 
@@ -31,12 +42,8 @@ export default function LoginPage() {
     setError(null)
     setSubmitting(true)
     try {
-      const employee = await login(email, password)
-      if (employee) {
-        router.push(`/d/${employee.department.toLowerCase()}`)
-      } else {
-        router.push("/dashboard")
-      }
+      await login(email, password)
+      router.push("/dashboard")
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.")
     } finally {
@@ -69,6 +76,14 @@ export default function LoginPage() {
             <CardDescription>Enter your work email and password to continue.</CardDescription>
           </CardHeader>
           <CardContent>
+            {sessionExpired && !error && (
+              <p
+                className="mb-4 rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground"
+                role="status"
+              >
+                Your session expired. Please sign in again.
+              </p>
+            )}
             <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="email">Email</Label>

@@ -9,19 +9,23 @@ import { PersonAvatar } from "@/components/person-avatar"
 import { StatusIndicator } from "@/components/status-indicator"
 import { buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { departments } from "@/lib/departments"
 import { departmentColor } from "@/lib/colors"
 import { initials } from "@/lib/utils"
 import { apiEmployeeStatusMeta } from "@/lib/status"
+import { useDepartments } from "@/hooks/use-departments"
 import { useEmployees } from "@/hooks/use-employees"
 
 export default function DepartmentLandingPage() {
   const { department: slug } = useParams<{ department: string }>()
-  const knownDepartment = departments.find((d) => d.toLowerCase() === slug.toLowerCase())
+  const { data: departmentsResponse, isLoading: departmentsLoading } = useDepartments()
+  const decodedSlug = decodeURIComponent(slug)
+  const knownDepartment = departmentsResponse?.items.find(
+    (d) => d.name.toLowerCase() === decodedSlug.toLowerCase(),
+  )
 
-  const { data: deptEmployeesResponse, isLoading } = useEmployees({ department: knownDepartment ?? slug })
+  const { data: deptEmployeesResponse, isLoading } = useEmployees({ departmentId: knownDepartment?.id })
 
-  if (isLoading) {
+  if (departmentsLoading || isLoading) {
     return (
       <div className="flex flex-1 flex-col">
         <SiteHeader title="Department" />
@@ -32,9 +36,7 @@ export default function DepartmentLandingPage() {
     )
   }
 
-  const employeesList = deptEmployeesResponse?.items ?? []
-
-  if (!knownDepartment && employeesList.length === 0) {
+  if (!knownDepartment) {
     return (
       <div className="flex flex-1 flex-col">
         <SiteHeader title="Department" />
@@ -48,7 +50,8 @@ export default function DepartmentLandingPage() {
     )
   }
 
-  const displayName = knownDepartment ?? employeesList[0]?.department ?? slug
+  const employeesList = deptEmployeesResponse?.items ?? []
+  const displayName = knownDepartment.name
   const onLeave = employeesList.filter((e) => e.status === "ON_LEAVE").length
   const leads = employeesList.filter((e) => e.managerId === null).length
   const reports = employeesList.length - leads

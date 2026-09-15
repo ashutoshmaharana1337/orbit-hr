@@ -5,18 +5,16 @@ import { Card, CardContent } from "@/components/ui/card"
 import { apiAttendanceStatusMeta } from "@/lib/status"
 import { useAttendanceSummary, useTodayAttendance } from "@/hooks/use-attendance"
 import { useEmployees } from "@/hooks/use-employees"
+import { useAuth } from "@/lib/auth-context"
+import { formatDate } from "@/lib/format"
 import { AttendanceTable } from "./attendance-table"
 import { ClockCard } from "./clock-card"
 
 const STATUSES = (["PRESENT", "LATE", "WFH", "ABSENT"] as const)
 
-const today = new Date().toLocaleDateString("en-US", {
-  weekday: "long",
-  month: "short",
-  day: "numeric",
-})
-
 export default function AttendancePage() {
+  const { user } = useAuth()
+  const today = formatDate(new Date(), user?.tenant?.timezone, { weekday: "long" })
   const { data: summaryData } = useAttendanceSummary()
   const { data: todayAttendance } = useTodayAttendance()
   const { data: employeesResponse } = useEmployees()
@@ -28,7 +26,9 @@ export default function AttendancePage() {
   }))
 
   const clockedIn = todayAttendance?.length ?? 0
-  const total = employeesResponse?.items?.length
+  // Only claim a total when we've actually seen every employee — the list
+  // is cursor-paginated, so a first page of 20 isn't the headcount.
+  const total = employeesResponse && !employeesResponse.hasMore ? employeesResponse.items.length : undefined
 
   return (
     <div className="flex flex-1 flex-col">

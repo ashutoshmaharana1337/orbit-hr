@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
 
@@ -80,12 +81,12 @@ export default function GlobalError({
                 Retry
               </button>
 
-              <a
+              <Link
                 href="/"
                 className="mt-2 block w-full text-center text-sm text-blue-600 hover:text-blue-700"
               >
                 Reload Page
-              </a>
+              </Link>
             </div>
           </div>
         </div>
