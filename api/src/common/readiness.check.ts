@@ -79,4 +79,5 @@ async function performReadinessCheck(): Promise<ReadinessCheckResult> {
 }
 
 // Export for use in other modules
-export { performReadinessCheck, ReadinessCheckResult };
+export { performReadinessCheck };
+export type { ReadinessCheckResult };

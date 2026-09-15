@@ -20,10 +20,12 @@ import { LeavePolicesModule } from './leave-policies/leave-policies.module.js';
 import { LeaveBalancesModule } from './leave-balances/leave-balances.module.js';
 import { CommonModule } from './common/common.module.js';
 import { RequestContextMiddleware } from './common/request-context.middleware.js';
+import { OriginCheckMiddleware } from './common/origin-check.middleware.js';
+import { validateEnv } from './common/env.validation.js';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     ThrottlerModule.forRoot({
       // A generous default so normal use of the app is never throttled;
       // auth endpoints override this with a much tighter limit (see
@@ -57,8 +59,8 @@ import { RequestContextMiddleware } from './common/request-context.middleware.js
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    // Register request context middleware for all routes
-    // This should be early in the chain to capture request context
-    consumer.apply(RequestContextMiddleware).forRoutes('*');
+    // Origin check first (CSRF defense for the cookie session), then request
+    // context so every later log line carries the request id.
+    consumer.apply(OriginCheckMiddleware, RequestContextMiddleware).forRoutes('*');
   }
 }

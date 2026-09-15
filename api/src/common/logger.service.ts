@@ -15,6 +15,7 @@
 
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { LogShipperService } from './log-shipper.service.js';
+import { getRequestContext } from './request-context.js';
 
 export interface LogContext {
   requestId?: string;
@@ -35,31 +36,40 @@ export interface LogEntry extends LogContext {
 
 @Injectable()
 export class LoggerService extends Logger {
-  private context: LogContext = {};
-
   constructor(@Optional() private readonly logShipper?: LogShipperService) {
     super();
   }
 
-  setContext(context: Partial<LogContext>) {
-    this.context = { ...this.context, ...context };
+  /** Nest's base Logger passes a string context as the trailing arg; fold it into the entry. */
+  private normalizeExtra(extra?: LogContext | string): LogContext | undefined {
+    return typeof extra === 'string' ? { context: extra } : extra;
   }
 
-  clearContext() {
-    this.context = {};
+  private requestFields(): LogContext {
+    const ctx = getRequestContext();
+    if (!ctx) return {};
+    return {
+      requestId: ctx.requestId,
+      ...(ctx.tenantId && { tenantId: ctx.tenantId }),
+      ...(ctx.userId && { userId: ctx.userId }),
+      ...(ctx.userRole && { userRole: ctx.userRole }),
+    };
   }
 
-  private formatLog(message: string, level: string, extra?: LogContext): LogEntry {
+  private formatLog(message: string, level: string, extra?: LogContext | string): LogEntry {
     return {
       message,
       level: level as any,
       timestamp: new Date().toISOString(),
-      ...this.context,
-      ...extra,
+      // Per-request fields come from AsyncLocalStorage, never from mutable
+      // state on this singleton — concurrent requests would bleed into each
+      // other's log lines otherwise.
+      ...this.requestFields(),
+      ...this.normalizeExtra(extra),
     };
   }
 
-  debug(message: string, extra?: LogContext) {
+  debug(message: string, extra?: LogContext | string) {
     const entry = this.formatLog(message, 'debug', extra);
     console.log(JSON.stringify(entry));
     // Ship log to aggregation service if available
@@ -79,7 +89,7 @@ export class LoggerService extends Logger {
     super.log(message);
   }
 
-  warn(message: string, extra?: LogContext) {
+  warn(message: string, extra?: LogContext | string) {
     const entry = this.formatLog(message, 'warn', extra);
     console.warn(JSON.stringify(entry));
     // Ship log to aggregation service if available
@@ -89,7 +99,7 @@ export class LoggerService extends Logger {
     super.warn(message);
   }
 
-  error(message: string, trace?: string, extra?: LogContext) {
+  error(message: string, trace?: string, extra?: LogContext | string) {
     const entry = this.formatLog(message, 'error', extra);
     if (trace) {
       entry['stack'] = trace;

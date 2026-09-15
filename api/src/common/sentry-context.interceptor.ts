@@ -12,7 +12,7 @@ import * as Sentry from '@sentry/nestjs';
  *
  * This interceptor:
  * 1. Generates/extracts request ID for correlation
- * 2. Sets user context (userId, email)
+ * 2. Sets user context (userId only — no PII)
  * 3. Sets tenant context (for multi-tenant debugging)
  * 4. Sets role context (for RBAC debugging)
  * 5. Captures any errors that occur with full context
@@ -45,10 +45,10 @@ export class SentryContextInterceptor implements NestInterceptor {
 
     // Extract user context from JWT payload
     if (req.user) {
-      const { sub: userId, email, tenantId, role } = req.user;
+      const { sub: userId, tenantId, role } = req.user;
 
-      // Set user context for Sentry
-      this.sentry.setUserContext(userId, email);
+      // Set user context for Sentry — id only, never the email address
+      this.sentry.setUserContext(userId);
 
       // Set tenant context (critical for multi-tenant debugging)
       if (tenantId) {
@@ -63,7 +63,6 @@ export class SentryContextInterceptor implements NestInterceptor {
       // Add custom context with all user-related info
       this.sentry.setCustomContext('user', {
         id: userId,
-        email,
         role,
         tenantId,
       });

@@ -25,6 +25,11 @@ describe('EmployeesService - Core Logic', () => {
               create: vi.fn(),
               update: vi.fn(),
             },
+            // Any departmentId a test passes is treated as belonging to the tenant.
+            department: {
+              findFirst: vi.fn(async ({ where }: { where: { id: string } }) => ({ id: where.id })),
+            },
+            refreshToken: { updateMany: vi.fn() },
           },
         },
         {

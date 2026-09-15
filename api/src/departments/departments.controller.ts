@@ -7,6 +7,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
+import { Auditable } from '../audit/auditable.decorator.js';
 import type { JwtPayload } from '../auth/auth.types.js';
 
 @Controller('departments')
@@ -26,18 +27,21 @@ export class DepartmentsController {
 
   @Post()
   @Roles('ADMIN', 'HR')
+  @Auditable({ entityType: 'Department' })
   create(@CurrentUser() user: JwtPayload, @Body() dto: CreateDepartmentDto) {
     return this.departments.create(user.tenantId, dto);
   }
 
   @Patch(':id')
   @Roles('ADMIN', 'HR')
+  @Auditable({ entityType: 'Department' })
   update(@CurrentUser() user: JwtPayload, @Param('id') id: string, @Body() dto: UpdateDepartmentDto) {
     return this.departments.update(user.tenantId, id, dto);
   }
 
   @Delete(':id')
   @Roles('ADMIN', 'HR')
+  @Auditable({ entityType: 'Department' })
   delete(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.departments.delete(user.tenantId, id);
   }

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { EmployeesService } from './employees.service.js';
 import { CreateEmployeeDto } from './dto/create-employee.dto.js';
 import { UpdateEmployeeDto } from './dto/update-employee.dto.js';
@@ -48,8 +48,14 @@ export class EmployeesController {
   @Post(':id/invite')
   @Roles('ADMIN', 'HR')
   @BypassTenantRls() // needs to check the invited email for a login in ANY tenant, not just this one
+  @Auditable({ entityType: 'Employee', action: 'UPDATE', extractEntityId: (req) => req.params?.id ?? null })
   invite(@CurrentUser() user: JwtPayload, @Param('id') id: string, @Body() dto: InviteEmployeeDto) {
-    return this.auth.invite(user.tenantId, id, dto.role ?? 'EMPLOYEE');
+    const role = dto.role ?? 'EMPLOYEE';
+    // HR can onboard staff but must not be able to mint a peer or a superior.
+    if (user.role !== 'ADMIN' && (role === 'ADMIN' || role === 'HR')) {
+      throw new ForbiddenException('Only an ADMIN can grant the ADMIN or HR role');
+    }
+    return this.auth.invite(user.tenantId, id, role);
   }
 
   @Delete(':id')
@@ -61,7 +67,7 @@ export class EmployeesController {
 
   @Patch(':id/restore')
   @Roles('ADMIN', 'HR')
-  @Auditable({ entityType: 'Employee', action: 'RESTORE' })
+  @Auditable({ entityType: 'Employee', action: 'UPDATE' }) // AuditAction enum has no RESTORE; restore is recorded as an UPDATE (deletedAt cleared)
   restore(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.employees.restore(user.tenantId, id);
   }

@@ -1,7 +1,7 @@
 import { CallHandler, ExecutionContext, Injectable, NestInterceptor, Logger } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Observable } from 'rxjs';
-import { tap, catchError } from 'rxjs/operators';
+import { mergeMap } from 'rxjs/operators';
 import type { Request } from 'express';
 import type { AuthenticatedRequest } from '../auth/auth.types.js';
 import { AuditService } from './audit.service.js';
@@ -14,8 +14,18 @@ import { AUDITABLE_KEY, type AuditableOptions } from './auditable.decorator.js';
  * The interceptor:
  * 1. Captures request metadata (user, tenant, role)
  * 2. Executes the handler
- * 3. On success, extracts entity ID from response
- * 4. Logs the write operation to AuditLog
+ * 3. On success, extracts entity ID from response (or the decorator's extractor)
+ * 4. Writes the AuditLog row and only then lets the response through
+ *
+ * It is registered after TenantTransactionInterceptor, so the write happens
+ * inside the request's tenant transaction (same connection, RLS session
+ * variables already set). The write is awaited via `mergeMap` — a fire-and-
+ * forget `tap` would let the transaction commit before the INSERT ran, and
+ * the row was silently lost. A failed audit write fails (and rolls back) the
+ * mutation: no audit row, no change.
+ *
+ * Failed mutations are not logged: the enclosing transaction rolls back, so
+ * any row written here would vanish with it.
  */
 @Injectable()
 export class AuditInterceptor implements NestInterceptor {
@@ -55,32 +65,9 @@ export class AuditInterceptor implements NestInterceptor {
     }
 
     return next.handle().pipe(
-      tap((response) => {
-        this.logAudit(
-          tenantId,
-          userId,
-          userRole,
-          auditOptions,
-          method,
-          response,
-        ).catch((error) => {
-          this.logger.error(`Failed to log audit: ${error.message}`, error);
-        });
-      }),
-      catchError((error) => {
-        // Log failed mutations too (but with error indicator)
-        this.logAudit(
-          tenantId,
-          userId,
-          userRole,
-          auditOptions,
-          method,
-          null,
-          error,
-        ).catch((logError) => {
-          this.logger.error(`Failed to log audit error: ${logError.message}`, logError);
-        });
-        throw error;
+      mergeMap(async (response) => {
+        await this.logAudit(tenantId, userId, userRole, auditOptions, method, req, response);
+        return response;
       }),
     );
   }
@@ -91,13 +78,13 @@ export class AuditInterceptor implements NestInterceptor {
     userRole: string | null,
     options: AuditableOptions,
     method: string,
+    req: Request,
     response: unknown,
-    error?: Error,
   ) {
-    // Extract entity ID from response or custom extractor
-    let entityId: string | null = null;
+    // Extract entity ID from custom extractor or response
+    let entityId: string | null = options.extractEntityId?.(req, response) ?? null;
 
-    if (response && typeof response === 'object' && 'id' in response) {
+    if (!entityId && response && typeof response === 'object' && 'id' in response) {
       entityId = String(response.id);
     }
 
@@ -114,22 +101,18 @@ export class AuditInterceptor implements NestInterceptor {
       action = method === 'DELETE' ? 'DELETE' : method === 'POST' ? 'CREATE' : 'UPDATE';
     }
 
-    try {
-      await this.audit.logWrite({
-        tenantId,
-        entityType: options.entityType,
-        entityId,
-        action: action as any, // Type assertion needed for RESTORE custom action
-        userId: userId || undefined,
-        userRole: userRole || undefined,
-        afterValues:
-          action !== 'DELETE' && action !== 'RESTORE' && response && typeof response === 'object'
-            ? AuditService.serializeValues(response)
-            : undefined,
-        changeDescription: AuditService.generateChangeDescription(options.entityType, action as any),
-      });
-    } catch (err) {
-      this.logger.error(`Failed to audit log ${options.entityType}:${action}:${entityId}`, err);
-    }
+    await this.audit.logWrite({
+      tenantId,
+      entityType: options.entityType,
+      entityId,
+      action: action as any, // Type assertion needed for RESTORE custom action
+      userId: userId || undefined,
+      userRole: userRole || undefined,
+      afterValues:
+        action !== 'DELETE' && action !== 'RESTORE' && response && typeof response === 'object'
+          ? (AuditService.serializeValues(response) ?? undefined)
+          : undefined,
+      changeDescription: AuditService.generateChangeDescription(options.entityType, action as any) ?? undefined,
+    });
   }
 }

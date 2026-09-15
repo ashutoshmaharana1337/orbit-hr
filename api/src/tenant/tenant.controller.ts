@@ -6,6 +6,7 @@ import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import type { JwtPayload } from '../auth/auth.types.js';
+import { Auditable } from '../audit/auditable.decorator.js';
 
 @Controller('tenant')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -19,6 +20,7 @@ export class TenantController {
 
   @Patch('settings')
   @Roles('ADMIN')
+  @Auditable({ entityType: 'Tenant' })
   updateSettings(@CurrentUser() user: JwtPayload, @Body() dto: UpdateTenantSettingsDto) {
     return this.tenant.updateSettings(user.tenantId, dto);
   }
