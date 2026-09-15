@@ -16,11 +16,19 @@ export interface CursorPaginatedResponse<T> {
   hasMore: boolean
 }
 
-// Department type for the Department model
+// Department type for the Department model. list/findOne/create/update all
+// include the Prisma `_count.employees` aggregate; keep that shape rather
+// than renaming it, since it's what the API actually sends.
 export type Department = {
   id: string
   name: string
-  description?: string
+  description?: string | null
+  _count?: { employees: number }
+}
+
+// findOne only: the employees assigned to this department.
+export type DepartmentDetail = Department & {
+  employees: { id: string; name: string; title: string; email: string }[]
 }
 
 // Leave policy type (for future use when department-based policies are added)
