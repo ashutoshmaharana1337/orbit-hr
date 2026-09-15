@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { EmployeesService } from '../employees/employees.service.js';
 import type { JwtPayload } from '../auth/auth.types.js';
@@ -144,16 +144,22 @@ export class LeaveBalancesService {
       throw new NotFoundException('Leave balance not found for this employee in the specified year');
     }
 
-    const newUsedDays = Number(balance.usedDays) + daysToDeduct;
-    const newBalanceDays = Number(balance.entitledDays) - newUsedDays;
-
-    return this.prisma.leaveBalance.update({
-      where: { id: balance.id },
+    // Conditional update so two concurrent approvals can't both pass a
+    // check-then-act read and overdraw the balance.
+    const { count } = await this.prisma.leaveBalance.updateMany({
+      where: { id: balance.id, balanceDays: { gte: daysToDeduct } },
       data: {
-        usedDays: newUsedDays,
-        balanceDays: newBalanceDays,
+        usedDays: { increment: daysToDeduct },
+        balanceDays: { decrement: daysToDeduct },
       },
     });
+    if (count === 0) {
+      throw new BadRequestException(
+        `Insufficient leave balance (${Number(balance.balanceDays)} days available)`,
+      );
+    }
+
+    return this.prisma.leaveBalance.findUniqueOrThrow({ where: { id: balance.id } });
   }
 
   /**

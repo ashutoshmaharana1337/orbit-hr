@@ -16,17 +16,17 @@ export class AttendanceController {
 
   @Get('today')
   today(@CurrentUser() user: JwtPayload) {
-    return this.attendance.today(user.tenantId);
+    return this.attendance.today(user.tenantId, user);
   }
 
   @Get('summary')
   summary(@CurrentUser() user: JwtPayload) {
-    return this.attendance.summary(user.tenantId);
+    return this.attendance.summary(user.tenantId, user);
   }
 
   @Get('trend')
   trend(@CurrentUser() user: JwtPayload, @Query() query: AttendanceTrendQuery) {
-    return this.attendance.trend(user.tenantId, query.days ?? 7);
+    return this.attendance.trend(user.tenantId, query.days ?? 7, user);
   }
 
   @Post('clock-in')
@@ -45,6 +45,6 @@ export class AttendanceController {
   @Roles('ADMIN', 'HR', 'MANAGER')
   @Auditable({ entityType: 'AttendanceRecord' })
   upsert(@CurrentUser() user: JwtPayload, @Body() dto: UpsertAttendanceDto) {
-    return this.attendance.upsert(user.tenantId, dto);
+    return this.attendance.upsert(user.tenantId, user, dto);
   }
 }

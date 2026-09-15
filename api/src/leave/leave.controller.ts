@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { LeaveService } from './leave.service.js';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto.js';
 import { ListLeaveQuery } from './dto/list-leave.query.js';
@@ -20,8 +20,12 @@ export class LeaveController {
   }
 
   @Get('balance/:employeeId')
-  balance(@CurrentUser() user: JwtPayload, @Param('employeeId') employeeId: string) {
-    return this.leave.balance(user.tenantId, employeeId, user);
+  balance(
+    @CurrentUser() user: JwtPayload,
+    @Param('employeeId') employeeId: string,
+    @Query('year', new ParseIntPipe({ optional: true })) year?: number,
+  ) {
+    return this.leave.balance(user.tenantId, employeeId, user, year);
   }
 
   @Post()

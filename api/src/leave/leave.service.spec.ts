@@ -1,11 +1,25 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { LeaveService } from './leave.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { SoftDeleteService } from '../common/soft-delete.service.js';
 import { EmployeesService } from '../employees/employees.service.js';
 import { LeaveBalancesService } from '../leave-balances/leave-balances.service.js';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+/** UTC-midnight Monday at least a week ahead, so "not in the past" and weekday checks are deterministic. */
+function nextMonday(): Date {
+  const d = new Date();
+  d.setUTCHours(0, 0, 0, 0);
+  d.setUTCDate(d.getUTCDate() + 7 + ((8 - d.getUTCDay()) % 7));
+  return d;
+}
+function addDays(d: Date, n: number): Date {
+  return new Date(d.getTime() + n * 86_400_000);
+}
+function iso(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
 
 describe('LeaveService - Core Logic', () => {
   let service: LeaveService;
@@ -22,6 +36,9 @@ describe('LeaveService - Core Logic', () => {
         {
           provide: PrismaService,
           useValue: {
+            tenant: {
+              findUnique: vi.fn(async () => ({ timezone: 'UTC' })),
+            },
             leaveRequest: {
               findMany: vi.fn(),
               findFirst: vi.fn(),
@@ -30,7 +47,7 @@ describe('LeaveService - Core Logic', () => {
             },
             leaveBalance: {
               findFirst: vi.fn(),
-              findUniqueOrThrow: vi.fn(),
+              findMany: vi.fn(),
               update: vi.fn(),
             },
             employee: {
@@ -69,6 +86,8 @@ describe('LeaveService - Core Logic', () => {
   });
 
   describe('Leave Request Creation', () => {
+    const monday = nextMonday();
+
     it('should create a leave request with correct days calculation', async () => {
       const mockEmployee = { id: 'emp-1', tenantId: mockTenantId };
 
@@ -76,8 +95,8 @@ describe('LeaveService - Core Logic', () => {
 
       const createDto = {
         type: 'ANNUAL',
-        startDate: '2024-03-01',
-        endDate: '2024-03-05', // 5 days
+        startDate: iso(monday),
+        endDate: iso(addDays(monday, 4)), // Mon-Fri: 5 working days
         reason: 'Vacation',
       };
 
@@ -86,8 +105,8 @@ describe('LeaveService - Core Logic', () => {
         tenantId: mockTenantId,
         employeeId: 'emp-1',
         type: 'ANNUAL',
-        startDate: new Date('2024-03-01'),
-        endDate: new Date('2024-03-05'),
+        startDate: monday,
+        endDate: addDays(monday, 4),
         days: 5,
         reason: 'Vacation',
         status: 'PENDING',
@@ -102,6 +121,25 @@ describe('LeaveService - Core Logic', () => {
       expect(result.days).toBe(5);
       expect(result.status).toBe('PENDING');
       expect(result.type).toBe('ANNUAL');
+      expect(prisma.leaveRequest.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ days: 5 }) }),
+      );
+    });
+
+    it('should exclude weekends from the days calculation', async () => {
+      vi.mocked(employees.findByUserId).mockResolvedValueOnce({ id: 'emp-1', tenantId: mockTenantId });
+      vi.mocked(prisma.leaveRequest.create).mockResolvedValueOnce({ id: 'leave-1', days: 6 });
+
+      await service.create(mockTenantId, 'user-1', {
+        type: 'UNPAID',
+        startDate: iso(monday),
+        endDate: iso(addDays(monday, 7)), // Mon..next Mon spans a weekend: 6 working days
+        reason: 'Long break',
+      });
+
+      expect(prisma.leaveRequest.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ days: 6 }) }),
+      );
     });
 
     it('should calculate single day correctly', async () => {
@@ -111,8 +149,8 @@ describe('LeaveService - Core Logic', () => {
 
       const createDto = {
         type: 'SICK',
-        startDate: '2024-03-01',
-        endDate: '2024-03-01', // 1 day
+        startDate: iso(monday),
+        endDate: iso(monday), // 1 day
         reason: 'Sick leave',
       };
 
@@ -121,8 +159,8 @@ describe('LeaveService - Core Logic', () => {
         tenantId: mockTenantId,
         employeeId: 'emp-1',
         type: 'SICK',
-        startDate: new Date('2024-03-01'),
-        endDate: new Date('2024-03-01'),
+        startDate: monday,
+        endDate: monday,
         days: 1,
         reason: 'Sick leave',
         status: 'PENDING',
@@ -135,6 +173,9 @@ describe('LeaveService - Core Logic', () => {
       const result = await service.create(mockTenantId, 'user-1', createDto);
 
       expect(result.days).toBe(1);
+      expect(prisma.leaveRequest.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ days: 1 }) }),
+      );
     });
 
     it('should reject invalid date ranges', async () => {
@@ -144,14 +185,100 @@ describe('LeaveService - Core Logic', () => {
 
       const createDto = {
         type: 'ANNUAL',
-        startDate: '2024-03-05',
-        endDate: '2024-03-01', // End before start
+        startDate: iso(addDays(monday, 4)),
+        endDate: iso(monday), // End before start
         reason: 'Invalid',
       };
 
       await expect(service.create(mockTenantId, 'user-1', createDto)).rejects.toThrow(
         'endDate must be on or after startDate',
       );
+    });
+
+    it('should reject a startDate in the past', async () => {
+      vi.mocked(employees.findByUserId).mockResolvedValueOnce({ id: 'emp-1', tenantId: mockTenantId });
+
+      await expect(
+        service.create(mockTenantId, 'user-1', {
+          type: 'ANNUAL',
+          startDate: '2024-03-01',
+          endDate: '2024-03-05',
+          reason: 'Too late',
+        }),
+      ).rejects.toThrow('startDate cannot be in the past');
+      expect(prisma.leaveRequest.create).not.toHaveBeenCalled();
+    });
+
+    it('should reject a range overlapping an existing PENDING/APPROVED request', async () => {
+      vi.mocked(employees.findByUserId).mockResolvedValueOnce({ id: 'emp-1', tenantId: mockTenantId });
+      vi.mocked(prisma.leaveRequest.findFirst).mockResolvedValueOnce({ id: 'leave-existing' });
+
+      await expect(
+        service.create(mockTenantId, 'user-1', {
+          type: 'ANNUAL',
+          startDate: iso(monday),
+          endDate: iso(addDays(monday, 1)),
+          reason: 'Overlap',
+        }),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.leaveRequest.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            employeeId: 'emp-1',
+            status: { in: ['PENDING', 'APPROVED'] },
+          }),
+        }),
+      );
+      expect(prisma.leaveRequest.create).not.toHaveBeenCalled();
+    });
+
+    it('should reject a range that contains no working days', async () => {
+      vi.mocked(employees.findByUserId).mockResolvedValueOnce({ id: 'emp-1', tenantId: mockTenantId });
+
+      await expect(
+        service.create(mockTenantId, 'user-1', {
+          type: 'ANNUAL',
+          startDate: iso(addDays(monday, 5)), // Saturday
+          endDate: iso(addDays(monday, 6)), // Sunday
+          reason: 'Weekend',
+        }),
+      ).rejects.toThrow('Range contains no working days');
+    });
+
+    it('should reject when the balance cannot cover the request', async () => {
+      vi.mocked(employees.findByUserId).mockResolvedValueOnce({ id: 'emp-1', tenantId: mockTenantId });
+      vi.mocked(prisma.leavePolicy.findFirst).mockResolvedValueOnce({ id: 'policy-1', name: 'Annual Leave' });
+      vi.mocked(prisma.leaveBalance.findFirst).mockResolvedValueOnce({ id: 'balance-1', balanceDays: 3 });
+
+      await expect(
+        service.create(mockTenantId, 'user-1', {
+          type: 'ANNUAL',
+          startDate: iso(monday),
+          endDate: iso(addDays(monday, 4)), // 5 working days, only 3 available
+          reason: 'Too long',
+        }),
+      ).rejects.toThrow('Insufficient leave balance (3 days available)');
+      expect(prisma.leaveBalance.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ leavePolicyId: 'policy-1', year: monday.getUTCFullYear() }),
+        }),
+      );
+    });
+
+    it('should skip the balance check for WORK_FROM_HOME', async () => {
+      vi.mocked(employees.findByUserId).mockResolvedValueOnce({ id: 'emp-1', tenantId: mockTenantId });
+      vi.mocked(prisma.leaveRequest.create).mockResolvedValueOnce({ id: 'leave-3', days: 1 });
+
+      await service.create(mockTenantId, 'user-1', {
+        type: 'WORK_FROM_HOME',
+        startDate: iso(monday),
+        endDate: iso(monday),
+        reason: 'Plumber',
+      });
+
+      expect(prisma.leavePolicy.findFirst).not.toHaveBeenCalled();
+      expect(prisma.leaveBalance.findFirst).not.toHaveBeenCalled();
+      expect(prisma.leaveRequest.create).toHaveBeenCalled();
     });
   });
 
@@ -282,6 +409,8 @@ describe('LeaveService - Core Logic', () => {
         type: 'ANNUAL',
         days: 10,
         status: 'PENDING',
+        startDate: new Date(Date.UTC(2027, 2, 1)),
+        endDate: new Date(Date.UTC(2027, 2, 12)),
         employee: { id: 'emp-1', userId: 'user-1', managerId: null },
       };
 
@@ -293,7 +422,7 @@ describe('LeaveService - Core Logic', () => {
         leavePolicyId: 'policy-1',
         entitledDays: 5,
         usedDays: 2, // Only 3 days left
-        year: new Date().getFullYear(),
+        year: 2027,
         tenantId: mockTenantId,
       };
 
@@ -311,6 +440,48 @@ describe('LeaveService - Core Logic', () => {
       await expect(service.decide(mockTenantId, 'leave-1', approver, true)).rejects.toThrow(
         'Approving this request would exceed the remaining leave balance',
       );
+      // Balance year follows the leave's start date, not the approval date
+      expect(prisma.leaveBalance.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ year: 2027 }) }),
+      );
+      expect(leaveBalances.deductDays).not.toHaveBeenCalled();
+    });
+
+    it('should deduct from the balance year of the leave start date on approval', async () => {
+      const request = {
+        id: 'leave-1',
+        tenantId: mockTenantId,
+        employeeId: 'emp-1',
+        type: 'SICK',
+        days: 2,
+        status: 'PENDING',
+        startDate: new Date(Date.UTC(2027, 0, 4)),
+        endDate: new Date(Date.UTC(2027, 0, 5)),
+        employee: { id: 'emp-1', userId: 'user-1', managerId: null },
+      };
+
+      vi.mocked(prisma.leaveRequest.findFirst).mockResolvedValueOnce(request);
+      vi.mocked(prisma.leavePolicy.findFirst).mockResolvedValueOnce({ id: 'policy-sick', name: 'Sick Leave' });
+      vi.mocked(prisma.leaveBalance.findFirst).mockResolvedValueOnce({
+        id: 'balance-2',
+        entitledDays: 10,
+        usedDays: 0,
+        balanceDays: 10,
+        year: 2027,
+      });
+      vi.mocked(prisma.leaveRequest.update).mockResolvedValueOnce({ id: 'leave-1', status: 'APPROVED' });
+
+      const approver = {
+        sub: 'user-admin',
+        tenantId: mockTenantId,
+        email: 'admin@company.com',
+        role: 'ADMIN' as const,
+      };
+
+      const result = await service.decide(mockTenantId, 'leave-1', approver, true);
+
+      expect(result.status).toBe('APPROVED');
+      expect(leaveBalances.deductDays).toHaveBeenCalledWith(mockTenantId, 'emp-1', 'policy-sick', 2027, 2);
     });
 
     it('should reject approval if manager lacks authority', async () => {
@@ -353,18 +524,32 @@ describe('LeaveService - Core Logic', () => {
   });
 
   describe('Leave Balance', () => {
+    const mockBalances = [
+      {
+        id: 'balance-1',
+        employeeId: 'emp-1',
+        year: 2026,
+        entitledDays: 20,
+        usedDays: 5,
+        balanceDays: 15,
+        leavePolicy: { id: 'policy-1', name: 'Annual Leave' },
+      },
+      {
+        id: 'balance-2',
+        employeeId: 'emp-1',
+        year: 2026,
+        entitledDays: 10,
+        usedDays: 0,
+        balanceDays: 10,
+        leavePolicy: { id: 'policy-2', name: 'Sick Leave' },
+      },
+    ];
+
     it('should retrieve leave balance for employee', async () => {
       const mockEmployee = { id: 'emp-1', tenantId: mockTenantId, deletedAt: null };
 
-      const mockBalance = {
-        id: 'balance-1',
-        employeeId: 'emp-1',
-        entitledDays: 20,
-        usedDays: 5,
-      };
-
       vi.mocked(prisma.employee.findFirst).mockResolvedValueOnce(mockEmployee);
-      vi.mocked(prisma.leaveBalance.findUniqueOrThrow).mockResolvedValueOnce(mockBalance);
+      vi.mocked(prisma.leaveBalance.findMany).mockResolvedValueOnce(mockBalances);
 
       const requester = {
         sub: 'user-admin',
@@ -373,25 +558,42 @@ describe('LeaveService - Core Logic', () => {
         role: 'ADMIN' as const,
       };
 
-      const result = await service.balance(mockTenantId, 'emp-1', requester);
+      const result = await service.balance(mockTenantId, 'emp-1', requester, 2026);
 
-      expect(result.entitledDays).toBe(20);
-      expect(result.usedDays).toBe(5);
+      expect(result).toHaveLength(2);
+      expect(result[0].policy).toEqual({ id: 'policy-1', name: 'Annual Leave' });
+      expect(result[0].entitledDays).toBe(20);
+      expect(result[0].usedDays).toBe(5);
+      expect(result[0].balanceDays).toBe(15);
+      expect(prisma.leaveBalance.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ employeeId: 'emp-1', year: 2026 }) }),
+      );
+    });
+
+    it('should default to the current year', async () => {
+      vi.mocked(prisma.employee.findFirst).mockResolvedValueOnce({ id: 'emp-1', tenantId: mockTenantId });
+      vi.mocked(prisma.leaveBalance.findMany).mockResolvedValueOnce([]);
+
+      const requester = {
+        sub: 'user-admin',
+        tenantId: mockTenantId,
+        email: 'admin@company.com',
+        role: 'ADMIN' as const,
+      };
+
+      await service.balance(mockTenantId, 'emp-1', requester);
+
+      expect(prisma.leaveBalance.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ year: new Date().getFullYear() }) }),
+      );
     });
 
     it('should allow employee to view own balance', async () => {
       const mockEmployee = { id: 'emp-1', tenantId: mockTenantId, deletedAt: null };
 
-      const mockBalance = {
-        id: 'balance-1',
-        employeeId: 'emp-1',
-        entitledDays: 20,
-        usedDays: 5,
-      };
-
       vi.mocked(prisma.employee.findFirst).mockResolvedValueOnce(mockEmployee);
       vi.mocked(employees.findByUserId).mockResolvedValueOnce(mockEmployee);
-      vi.mocked(prisma.leaveBalance.findUniqueOrThrow).mockResolvedValueOnce(mockBalance);
+      vi.mocked(prisma.leaveBalance.findMany).mockResolvedValueOnce(mockBalances);
 
       const requester = {
         sub: 'user-1',
@@ -403,6 +605,7 @@ describe('LeaveService - Core Logic', () => {
       const result = await service.balance(mockTenantId, 'emp-1', requester);
 
       expect(result).toBeDefined();
+      expect(result).toHaveLength(2);
     });
 
     it('should prevent employee from viewing others balance without permission', async () => {

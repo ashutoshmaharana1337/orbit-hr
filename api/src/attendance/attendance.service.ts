@@ -1,9 +1,10 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { SoftDeleteService } from '../common/soft-delete.service.js';
 import { EmployeesService } from '../employees/employees.service.js';
 import { businessDateUTC, minutesSinceLocalMidnight } from './business-time.js';
 import type { UpsertAttendanceDto } from './dto/upsert-attendance.dto.js';
+import type { JwtPayload } from '../auth/auth.types.js';
 
 @Injectable()
 export class AttendanceService {
@@ -20,31 +21,58 @@ export class AttendanceService {
     return tenant;
   }
 
-  async today(tenantId: string) {
-    const { timezone } = await this.getTenantTimeSettings(tenantId);
+  /**
+   * Which employees' records the requester may see: everyone for ADMIN/HR,
+   * self + direct reports for MANAGER, self only for EMPLOYEE.
+   */
+  private async visibleEmployeeFilter(
+    tenantId: string,
+    requester: JwtPayload | undefined,
+  ): Promise<{ employeeId?: string; employee?: { OR: { id?: string; managerId?: string }[] } }> {
+    if (!requester || requester.role === 'ADMIN' || requester.role === 'HR') return {};
+    const self = await this.employees.findByUserId(tenantId, requester.sub);
+    if (requester.role === 'MANAGER') {
+      return { employee: { OR: [{ id: self.id }, { managerId: self.id }] } };
+    }
+    return { employeeId: self.id };
+  }
+
+  async today(tenantId: string, requester: JwtPayload) {
+    const [{ timezone }, scope] = await Promise.all([
+      this.getTenantTimeSettings(tenantId),
+      this.visibleEmployeeFilter(tenantId, requester),
+    ]);
     return this.prisma.attendanceRecord.findMany({
       where: {
         tenantId,
         date: businessDateUTC(timezone),
-        employee: SoftDeleteService.whereActive({}),
+        ...scope,
+        employee: SoftDeleteService.whereActive(scope.employee ?? {}),
       },
       include: { employee: { select: { id: true, name: true, departmentId: true } } },
       orderBy: { employee: { name: 'asc' } },
     });
   }
 
-  async summary(tenantId: string) {
-    const { timezone } = await this.getTenantTimeSettings(tenantId);
+  /** Omit `requester` for tenant-wide aggregates (dashboard stats); HTTP callers always pass it. */
+  async summary(tenantId: string, requester?: JwtPayload) {
+    const [{ timezone }, scope] = await Promise.all([
+      this.getTenantTimeSettings(tenantId),
+      this.visibleEmployeeFilter(tenantId, requester),
+    ]);
     const grouped = await this.prisma.attendanceRecord.groupBy({
       by: ['status'],
-      where: { tenantId, date: businessDateUTC(timezone) },
+      where: { tenantId, date: businessDateUTC(timezone), ...scope },
       _count: true,
     });
     return grouped.map((g) => ({ status: g.status, count: g._count }));
   }
 
-  async trend(tenantId: string, days: number) {
-    const { timezone } = await this.getTenantTimeSettings(tenantId);
+  async trend(tenantId: string, days: number, requester: JwtPayload) {
+    const [{ timezone }, scope] = await Promise.all([
+      this.getTenantTimeSettings(tenantId),
+      this.visibleEmployeeFilter(tenantId, requester),
+    ]);
     const today = businessDateUTC(timezone);
 
     const dates: Date[] = [];
@@ -59,12 +87,13 @@ export class AttendanceService {
     const [attendanceGroups, approvedLeaves] = await Promise.all([
       this.prisma.attendanceRecord.groupBy({
         by: ['date', 'status'],
-        where: { tenantId, date: { gte: rangeStart, lte: rangeEnd } },
+        where: { tenantId, date: { gte: rangeStart, lte: rangeEnd }, ...scope },
         _count: true,
       }),
       this.prisma.leaveRequest.findMany({
         where: {
           tenantId,
+          ...scope,
           status: 'APPROVED',
           startDate: { lte: rangeEnd },
           endDate: { gte: rangeStart },
@@ -137,9 +166,32 @@ export class AttendanceService {
     });
   }
 
-  async upsert(tenantId: string, dto: UpsertAttendanceDto) {
+  async upsert(tenantId: string, requester: JwtPayload, dto: UpsertAttendanceDto) {
     await this.employees.assertBelongsToTenant(tenantId, dto.employeeId);
+    if (requester.role === 'MANAGER') {
+      const self = await this.employees.findByUserId(tenantId, requester.sub);
+      const target = await this.prisma.employee.findFirst({
+        where: { id: dto.employeeId, tenantId },
+        select: { managerId: true },
+      });
+      if (target?.managerId !== self.id) {
+        throw new ForbiddenException('You can only record attendance for your direct reports');
+      }
+    }
+
     const date = new Date(dto.date);
+    const clockIn = dto.clockIn ? new Date(dto.clockIn) : undefined;
+    const clockOut = dto.clockOut ? new Date(dto.clockOut) : undefined;
+    let hours = dto.hours;
+    if (clockIn && clockOut) {
+      if (clockOut.getTime() <= clockIn.getTime()) {
+        throw new BadRequestException('clockOut must be after clockIn');
+      }
+      if (hours === undefined || hours === null) {
+        hours = Math.round(((clockOut.getTime() - clockIn.getTime()) / 3_600_000) * 100) / 100;
+      }
+    }
+
     return this.prisma.attendanceRecord.upsert({
       where: { employeeId_date: { employeeId: dto.employeeId, date } },
       create: {
@@ -147,15 +199,15 @@ export class AttendanceService {
         employeeId: dto.employeeId,
         date,
         status: dto.status,
-        clockIn: dto.clockIn ? new Date(dto.clockIn) : undefined,
-        clockOut: dto.clockOut ? new Date(dto.clockOut) : undefined,
-        hours: dto.hours ?? 0,
+        clockIn,
+        clockOut,
+        hours: hours ?? 0,
       },
       update: {
         status: dto.status,
-        clockIn: dto.clockIn ? new Date(dto.clockIn) : undefined,
-        clockOut: dto.clockOut ? new Date(dto.clockOut) : undefined,
-        hours: dto.hours ?? undefined,
+        clockIn,
+        clockOut,
+        hours: hours ?? undefined,
       },
     });
   }

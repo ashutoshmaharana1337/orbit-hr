@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { SoftDeleteService } from '../common/soft-delete.service.js';
 import { EmployeesService } from '../employees/employees.service.js';
@@ -7,10 +7,25 @@ import type { CreateLeaveRequestDto } from './dto/create-leave-request.dto.js';
 import type { ListLeaveQuery } from './dto/list-leave.query.js';
 import type { JwtPayload } from '../auth/auth.types.js';
 import { toCursor, fromCursor, type CursorPaginatedResponse } from '../common/pagination.js';
+import { businessDateUTC } from '../attendance/business-time.js';
 
+/** Inclusive count of working days (Mon-Fri) between two UTC-midnight dates. Negative when end < start. */
 function daysBetweenInclusive(start: Date, end: Date) {
-  return Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
+  const span = Math.round((end.getTime() - start.getTime()) / 86_400_000);
+  if (span < 0) return span;
+  let days = 0;
+  for (let i = 0; i <= span; i++) {
+    const dow = new Date(start.getTime() + i * 86_400_000).getUTCDay();
+    if (dow !== 0 && dow !== 6) days++;
+  }
+  return days;
 }
+
+/** Leave types that draw down a LeaveBalance, keyed to the seeded LeavePolicy name. */
+const BALANCE_POLICY_NAME: Partial<Record<CreateLeaveRequestDto['type'], string>> = {
+  ANNUAL: 'Annual Leave',
+  SICK: 'Sick Leave',
+};
 
 @Injectable()
 export class LeaveService {
@@ -115,8 +130,53 @@ export class LeaveService {
     const endDate = new Date(dto.endDate);
     const days = daysBetweenInclusive(startDate, endDate);
 
-    if (days <= 0) {
+    if (days < 0) {
       throw new BadRequestException('endDate must be on or after startDate');
+    }
+
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { timezone: true } });
+    const today = businessDateUTC(tenant?.timezone ?? 'UTC');
+    if (startDate.getTime() < today.getTime()) {
+      throw new BadRequestException('startDate cannot be in the past');
+    }
+
+    const overlapping = await this.prisma.leaveRequest.findFirst({
+      where: {
+        tenantId,
+        employeeId: employee.id,
+        status: { in: ['PENDING', 'APPROVED'] },
+        startDate: { lte: endDate },
+        endDate: { gte: startDate },
+      },
+      select: { id: true },
+    });
+    if (overlapping) {
+      throw new ConflictException('An existing leave request already covers part of this date range');
+    }
+
+    if (days === 0) {
+      throw new BadRequestException('Range contains no working days');
+    }
+
+    // Balance check only applies once the tenant has configured the matching policy;
+    // a freshly registered tenant with no policies can still file requests.
+    const policyName = BALANCE_POLICY_NAME[dto.type];
+    const leavePolicy = policyName
+      ? await this.prisma.leavePolicy.findFirst({ where: { tenantId, name: policyName } })
+      : null;
+    if (leavePolicy) {
+      const balance = await this.prisma.leaveBalance.findFirst({
+        where: {
+          tenantId,
+          employeeId: employee.id,
+          leavePolicyId: leavePolicy.id,
+          year: startDate.getUTCFullYear(),
+        },
+      });
+      const available = balance ? Number(balance.balanceDays) : 0;
+      if (available < days) {
+        throw new BadRequestException(`Insufficient leave balance (${available} days available)`);
+      }
     }
 
     return this.prisma.leaveRequest.create({
@@ -130,6 +190,16 @@ export class LeaveService {
         reason: dto.reason,
       },
     });
+  }
+
+  private async findPolicy(tenantId: string, policyName: string) {
+    const leavePolicy = await this.prisma.leavePolicy.findFirst({
+      where: { tenantId, name: policyName },
+    });
+    if (!leavePolicy) {
+      throw new BadRequestException(`Leave policy "${policyName}" not found for this tenant`);
+    }
+    return leavePolicy;
   }
 
   async decide(tenantId: string, id: string, approver: JwtPayload, approve: boolean) {
@@ -152,36 +222,23 @@ export class LeaveService {
     }
 
     // For tracked leave types, validate and update balance
-    if (approve && (request.type === 'ANNUAL' || request.type === 'SICK')) {
-      // Map LeaveType to LeavePolicy name
-      const policyNameMap = {
-        ANNUAL: 'Annual Leave',
-        SICK: 'Sick Leave',
-      };
-      const policyName = policyNameMap[request.type];
+    const policyName = BALANCE_POLICY_NAME[request.type];
+    if (approve && policyName) {
+      const leavePolicy = await this.findPolicy(tenantId, policyName);
 
-      // Find the corresponding leave policy
-      const leavePolicy = await this.prisma.leavePolicy.findFirst({
-        where: { tenantId, name: policyName },
-      });
-
-      if (!leavePolicy) {
-        throw new BadRequestException(`Leave policy "${policyName}" not found for this tenant`);
-      }
-
-      // Get or create balance for this employee, policy, and year
-      const currentYear = new Date().getFullYear();
+      // Balance year is the year the leave is taken in, not the year it's approved.
+      const year = request.startDate.getUTCFullYear();
       const balance = await this.prisma.leaveBalance.findFirst({
         where: {
           tenantId,
           employeeId: request.employeeId,
           leavePolicyId: leavePolicy.id,
-          year: currentYear,
+          year,
         },
       });
 
       if (!balance) {
-        throw new BadRequestException(`Leave balance not found for this employee in ${currentYear}`);
+        throw new BadRequestException(`Leave balance not found for this employee in ${year}`);
       }
 
       // Check if approval would exceed balance
@@ -190,12 +247,12 @@ export class LeaveService {
         throw new BadRequestException('Approving this request would exceed the remaining leave balance');
       }
 
-      // Deduct days from balance
+      // Deduct days from balance (conditional update; throws 400 if it would overdraw)
       await this.leaveBalances.deductDays(
         tenantId,
         request.employeeId,
         leavePolicy.id,
-        currentYear,
+        year,
         request.days,
       );
     }
@@ -210,7 +267,7 @@ export class LeaveService {
     });
   }
 
-  async balance(tenantId: string, employeeId: string, requester: JwtPayload) {
+  async balance(tenantId: string, employeeId: string, requester: JwtPayload, year?: number) {
     const employee = await this.prisma.employee.findFirst({
       where: SoftDeleteService.whereActive({ id: employeeId, tenantId }),
     });
@@ -222,6 +279,19 @@ export class LeaveService {
       if (!allowed) throw new ForbiddenException("You cannot view this employee's leave balance");
     }
 
-    return this.prisma.leaveBalance.findUniqueOrThrow({ where: { employeeId } });
+    // LeaveBalance is unique on [tenantId, employeeId, leavePolicyId, year];
+    // return every policy's balance for this employee in the requested year.
+    const balances = await this.prisma.leaveBalance.findMany({
+      where: { tenantId, employeeId, year: year ?? new Date().getFullYear() },
+      include: { leavePolicy: { select: { id: true, name: true } } },
+      orderBy: { leavePolicy: { name: 'asc' } },
+    });
+    return balances.map((b) => ({
+      policy: b.leavePolicy,
+      year: b.year,
+      entitledDays: Number(b.entitledDays),
+      usedDays: Number(b.usedDays),
+      balanceDays: Number(b.balanceDays),
+    }));
   }
 }
