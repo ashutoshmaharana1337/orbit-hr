@@ -1,5 +1,5 @@
 import { apiFetch } from "@/lib/api-client"
-import type { Department, CursorPaginatedResponse } from "./types"
+import type { Department, DepartmentDetail, CursorPaginatedResponse } from "./types"
 
 export type CreateDepartmentInput = {
   name: string
@@ -13,7 +13,7 @@ export function listDepartments() {
 }
 
 export function getDepartment(id: string) {
-  return apiFetch<Department>(`/departments/${id}`)
+  return apiFetch<DepartmentDetail>(`/departments/${id}`)
 }
 
 export function createDepartment(input: CreateDepartmentInput) {

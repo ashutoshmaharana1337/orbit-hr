@@ -7,6 +7,7 @@ import {
   CalendarClock,
   CalendarDays,
   LayoutDashboard,
+  Network,
   ReceiptIndianRupee,
   Sparkles,
   Users,
@@ -33,6 +34,7 @@ import { initials } from "@/lib/utils"
 const mainNav = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Employees", url: "/employees", icon: Users },
+  { title: "Departments", url: "/departments", icon: Network },
   { title: "Attendance", url: "/attendance", icon: CalendarClock },
   { title: "Leave", url: "/leave", icon: CalendarDays },
 ]
