@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { PrismaService } from '../prisma/prisma.service';
-import { LoggerService } from './logger.service';
+import { PrismaService } from '../prisma/prisma.service.js';
+import { LoggerService } from './logger.service.js';
 
 /**
  * Data Retention Service
@@ -79,7 +79,7 @@ export class DataRetentionService {
       await this.customLogger.logSystemEvent({
         action: 'DATA_PURGE_FAILED',
         details: {
-          error: error.message,
+          error: (error as Error).message,
           timestamp: new Date().toISOString(),
         },
       });
@@ -128,7 +128,7 @@ export class DataRetentionService {
       const deleteResult = await this.prisma.employees.deleteMany({
         where: {
           id: {
-            in: employeesToPurge.map(e => e.id),
+            in: employeesToPurge.map((e: { id: string }) => e.id),
           },
         },
       });

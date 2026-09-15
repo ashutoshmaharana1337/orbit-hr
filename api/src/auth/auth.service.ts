@@ -82,7 +82,6 @@ export class AuthService {
         status: 'ACTIVE',
         joinDate: new Date(),
         phone: '',
-        leaveBalance: { create: {} },
       },
     });
 
@@ -224,7 +223,7 @@ export class AuthService {
       id: user.id,
       email: user.email,
       role: user.role,
-      tenant: { id: user.tenant.id, name: user.tenant.name, slug: user.tenant.slug },
+      tenant: { id: user.tenant.id, name: user.tenant.name, slug: user.tenant.slug, timezone: user.tenant.timezone },
       employee: user.employee,
     };
   }

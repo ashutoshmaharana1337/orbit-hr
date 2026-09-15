@@ -18,14 +18,15 @@ export class AppService {
         database: 'connected',
         responseTime,
       };
-    } catch (error) {
+    } catch {
       const responseTime = Date.now() - startTime;
 
       return {
         status: 'error',
         timestamp: new Date().toISOString(),
+        // Deliberately no error text: the raw driver message can include the
+        // host, database name, or role. Details go to the log, not the client.
         database: 'disconnected',
-        error: (error as Error).message,
         responseTime,
       };
     }

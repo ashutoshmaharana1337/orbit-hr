@@ -1,6 +1,6 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { LoggerService } from '../common/logger.service';
+import { PrismaService } from '../prisma/prisma.service.js';
+import { LoggerService } from '../common/logger.service.js';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -130,7 +130,7 @@ export class TenantDeletionService {
       }
 
       // Execute deletion in transaction
-      const result = await this.prisma.$transaction(async (tx) => {
+      const result = await this.prisma.$transaction(async (tx: any) => {
         // 1. Mark tenant as deleted
         await tx.tenants.update({
           where: { id: tenantId },
@@ -252,7 +252,7 @@ export class TenantDeletionService {
         details: {
           tenantId,
           backupId,
-          error: error.message,
+          error: (error as Error).message,
           timestamp: new Date().toISOString(),
         },
       });
