@@ -20,7 +20,8 @@ management — built from scratch on Next.js and NestJS.
 
 ## Quick start
 
-Prerequisites: Node 22 (see `.nvmrc`), Docker.
+Prerequisites: Node 22 (see `.nvmrc`), Docker. Docker Desktop must be running
+before `docker compose up` (Postgres runs in a container).
 
 ```bash
 # Postgres
@@ -58,6 +59,35 @@ connect as one. `DIRECT_DATABASE_URL` is the privileged role that
 RLS policies; it's never used at runtime. See
 [docs/07-production-hardening.md](docs/07-production-hardening.md#high-postgres-row-level-security)
 for the full reasoning.
+
+The RLS migration creates the `orbit_app` role with a fixed development
+password (`orbit_app_dev_password`, the value in `api/.env.example`). That
+migration has already been applied and must not be edited, so **in any new
+environment, rotate the password right after the first `prisma migrate
+deploy`** using `scripts/rotate-db-app-password.sh` (also useful for
+periodic rotation later — it's a plain `ALTER ROLE`, not a schema change,
+so it's safe to run any number of times):
+
+```bash
+DIRECT_DATABASE_URL="postgresql://orbit:<owner-password>@<host>:5432/orbit_hr?schema=public" \
+  scripts/rotate-db-app-password.sh
+```
+
+It prints the new `DATABASE_URL` on stdout — store it in the environment's
+secret manager (`flyctl secrets set` for the API) and redeploy; existing
+connections keep working on the old password until the app restarts and
+opens new ones, so rotating and redeploying should happen close together.
+
+### Deploying
+
+The API deploys to Fly.io from `api/fly.toml` via
+`scripts/deploy-production.sh` (`release_command` runs
+`prisma migrate deploy` before the new release goes live); the
+`Deploy` GitHub workflow calls the same script for staging and production.
+The web app deploys through the Vercel Git integration — set
+`NEXT_PUBLIC_API_URL` (and optionally `NEXT_PUBLIC_SENTRY_DSN`) in the Vercel
+project settings. Both apps also ship Dockerfiles for self-hosting; see
+`docker-compose.staging.yml`.
 
 ## Tech stack
 

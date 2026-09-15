@@ -1,8 +1,9 @@
 import type { NextConfig } from "next";
-import { withSentryConfig } from "@sentry/nextjs";
+import { withSentryConfig } from "@sentry/nextjs/config";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Emit .next/standalone for the Docker image (see web/Dockerfile).
+  output: "standalone",
   webpack: (config) => {
     config.externals.push("pino-pretty", "encoding");
     return config;
@@ -26,14 +27,8 @@ const sentryConfig = withSentryConfig(
     // Upload a larger set of source maps for better debugging (optional)
     widenClientFileUpload: true,
 
-    // Transpiles SDK to be compatible with IE11 (increases bundle size)
-    transpileClientSDK: false,
-
     // Routes browser requests to Sentry through a Next.js rewrite to circumvent ad-blockers (increases server load)
     tunnelRoute: "/monitoring",
-
-    // Hides client-side routes from being traced/monitored
-    hideSourceMaps: true,
   }
 );
 
